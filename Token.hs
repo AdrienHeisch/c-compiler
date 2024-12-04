@@ -1,4 +1,4 @@
-module Token where
+module Token (Token(..), make, identChars, identBeginChars, whiteChars) where
 
 import Data.Char (isAlpha, isDigit)
 import Op
@@ -49,11 +49,11 @@ data Type
   | Double
   deriving (Show, Eq)
 
-mkToken :: String -> Token
-mkToken str = case str of
+make :: String -> Token
+make str = case str of
   ";" -> Semicolon
   "void" -> Type Void
-  _ | str == "bool" || str == "_Bool" -> keywordUnimplErr str
+  "bool" -> keywordUnimplErr str
   "char" -> Type Char
   "short" -> Type Short
   "int" -> Type Int
@@ -65,7 +65,7 @@ mkToken str = case str of
   "auto" -> keywordUnimplErr str
   "const" -> Const
   "static" -> keywordUnimplErr str
-  _ | str == "static_assert" || str == "_Static_assert" -> keywordUnimplErr str
+  "static_assert" -> keywordUnimplErr str
   "constexpr" -> keywordUnimplErr str
   "_Atomic" -> keywordUnimplErr str
   "_BitInt" -> keywordUnimplErr str
@@ -98,9 +98,9 @@ mkToken str = case str of
   "volatile" -> keywordUnimplErr str
   "inline" -> keywordUnimplErr str
   "nullptr" -> keywordUnimplErr str
-  _ | str == "thread_local" || str == "_Thread_local" -> keywordUnimplErr str
-  _ | str == "alignas" || str == "_Alignas" -> keywordUnimplErr str
-  _ | str == "alignof" || str == "_Alignof" -> keywordUnimplErr str
+  "thread_local" -> keywordUnimplErr str
+  "alignas" -> keywordUnimplErr str
+  "alignof" -> keywordUnimplErr str
   "typeof" -> keywordUnimplErr str
   "typeof_unqual" -> keywordUnimplErr str
   "sizeof" -> Op Sizeof
@@ -173,11 +173,11 @@ isStringLiteral ('"' : cs) = case cs of
   _ -> last cs == '"'
 isStringLiteral _ = False
 
--- isImplImport :: String -> Bool
--- isImplImport ('<' : cs) = case cs of
---   "" -> False
---   _ -> last cs == '>'
--- isImplImport _ = False
+isImplHeader :: String -> Bool
+isImplHeader ('<' : cs) = case cs of
+  "" -> False
+  _ -> last cs == '>'
+isImplHeader _ = False
 
 identBeginChars :: [Char]
 identBeginChars = ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']
