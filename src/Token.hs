@@ -1,7 +1,8 @@
-module Token (Token(..), make, identChars, identBeginChars, whiteChars) where
+module Token (Token (..), make, identChars, identBeginChars, whiteChars) where
 
-import Data.Char (isAlpha, isDigit)
-import Op
+import Data.Char (isDigit)
+import Op (Op)
+import Op qualified (Op (..))
 
 data Token
   = Type Type
@@ -103,45 +104,45 @@ make str = case str of
   "alignof" -> keywordUnimplErr str
   "typeof" -> keywordUnimplErr str
   "typeof_unqual" -> keywordUnimplErr str
-  "sizeof" -> Op Sizeof
-  "!" -> Op Not
-  "==" -> Op Equal
-  "!=" -> Op NotEqual
-  ">" -> Op Gt
-  ">=" -> Op Gte
-  "<" -> Op Lt
-  "<=" -> Op Lte
-  "&&" -> Op BoolAnd
-  "||" -> Op BoolOr
-  "%" -> Op Mod
-  "%=" -> Op ModAssign
-  "+" -> Op AddOrPlus
-  "+=" -> Op AddAssign
-  "-" -> Op SubOrNeg
-  "-=" -> Op SubAssign
-  "*" -> Op MultOrIndir
-  "*=" -> Op MultAssign
-  "/" -> Op Div
-  "/=" -> Op DivAssign
-  "++" -> Op Increment
-  "--" -> Op Decrement
-  "~" -> Op BitNot
-  "&" -> Op BitAndOrAddr
-  "&=" -> Op BitAndAssign
-  "|" -> Op BitOr
-  "|=" -> Op BitOrAssign
-  "^" -> Op BitXor
-  "^=" -> Op BitXorAssign
-  "<<" -> Op LShift
-  "<<=" -> Op LShiftAssign
-  ">>" -> Op RShift
-  ">>=" -> Op RShiftAssign
-  "->" -> Op Deref
-  "." -> Op StructRef
-  "=" -> Op Assign
-  "," -> Op Comma
-  "?" -> Op TernaryThen
-  ":" -> Op TernaryElse
+  "sizeof" -> Op Op.Sizeof
+  "!" -> Op Op.Not
+  "==" -> Op Op.Equal
+  "!=" -> Op Op.NotEqual
+  ">" -> Op Op.Gt
+  ">=" -> Op Op.Gte
+  "<" -> Op Op.Lt
+  "<=" -> Op Op.Lte
+  "&&" -> Op Op.BoolAnd
+  "||" -> Op Op.BoolOr
+  "%" -> Op Op.Mod
+  "%=" -> Op Op.ModAssign
+  "+" -> Op Op.AddOrPlus
+  "+=" -> Op Op.AddAssign
+  "-" -> Op Op.SubOrNeg
+  "-=" -> Op Op.SubAssign
+  "*" -> Op Op.MultOrIndir
+  "*=" -> Op Op.MultAssign
+  "/" -> Op Op.Div
+  "/=" -> Op Op.DivAssign
+  "++" -> Op Op.Increment
+  "--" -> Op Op.Decrement
+  "~" -> Op Op.BitNot
+  "&" -> Op Op.BitAndOrAddr
+  "&=" -> Op Op.BitAndAssign
+  "|" -> Op Op.BitOr
+  "|=" -> Op Op.BitOrAssign
+  "^" -> Op Op.BitXor
+  "^=" -> Op Op.BitXorAssign
+  "<<" -> Op Op.LShift
+  "<<=" -> Op Op.LShiftAssign
+  ">>" -> Op Op.RShift
+  ">>=" -> Op Op.RShiftAssign
+  "->" -> Op Op.Deref
+  "." -> Op Op.StructRef
+  "=" -> Op Op.Assign
+  "," -> Op Op.Comma
+  "?" -> Op Op.TernaryThen
+  ":" -> Op Op.TernaryElse
   "(" -> DelimOpen Pr
   ")" -> DelimClose Pr
   "{" -> DelimOpen Br
@@ -151,11 +152,11 @@ make str = case str of
   "#" -> Directive
   "false" -> keywordUnimplErr str
   "true" -> keywordUnimplErr str
-  str | isStringLiteral str -> StrLiteral (tail (take (length str - 1) str))
-  str | isIdentifier str -> Id str
-  str | isNumberLiteral str -> NumLiteral (read str)
-  str | isWhitespace str -> Nil
-  str -> error ("Unexpected character sequence \"" ++ str ++ "\"")
+  _ | isStringLiteral str -> StrLiteral (tail (take (length str - 1) str))
+  _ | isIdentifier str -> Id str
+  _ | isNumberLiteral str -> NumLiteral (read str)
+  _ | isWhitespace str -> Nil
+  _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
 
 keywordUnimplErr :: String -> a
 keywordUnimplErr keyword = error ("Unimplemented keyword : " ++ keyword)
@@ -165,7 +166,8 @@ isNumberLiteral "" = False
 isNumberLiteral (c : "") = isDigit c
 isNumberLiteral (c : cs) = isDigit c && isNumberLiteral cs
 
-strLitForbiddenChars = ['\n']
+-- strLitForbiddenChars :: [Char]
+-- strLitForbiddenChars = ['\n']
 
 isStringLiteral :: String -> Bool
 isStringLiteral ('"' : cs) = case cs of
@@ -173,11 +175,11 @@ isStringLiteral ('"' : cs) = case cs of
   _ -> last cs == '"'
 isStringLiteral _ = False
 
-isImplHeader :: String -> Bool
-isImplHeader ('<' : cs) = case cs of
-  "" -> False
-  _ -> last cs == '>'
-isImplHeader _ = False
+-- isImplHeader :: String -> Bool
+-- isImplHeader ('<' : cs) = case cs of
+--   "" -> False
+--   _ -> last cs == '>'
+-- isImplHeader _ = False
 
 identBeginChars :: [Char]
 identBeginChars = ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']
@@ -196,4 +198,4 @@ whiteChars = [' ', '\n']
 isWhitespace :: String -> Bool
 isWhitespace "" = True
 isWhitespace (c : cs) | c `elem` whiteChars = isWhitespace cs
-isWhitespace str = False
+isWhitespace _ = False

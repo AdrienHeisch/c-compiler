@@ -1,4 +1,4 @@
-module Op where
+module Op (Op(..), opChars) where
 
 data Op
   = Not
@@ -44,6 +44,7 @@ data Op
   | Sizeof
   deriving (Show, Eq)
 
+opChars :: [Char]
 opChars = ['=', '+', '-', '*', '/', '%', '<', '>', '|', '&', '!', '?', ':']
 
 -- opPrecedence :: Op -> Int
