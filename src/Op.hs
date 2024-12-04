@@ -1,4 +1,4 @@
-module Op (Op(..), opChars) where
+module Op (Op(..)) where
 
 data Op
   = Not
@@ -43,9 +43,6 @@ data Op
   | Index
   | Sizeof
   deriving (Show, Eq)
-
-opChars :: [Char]
-opChars = ['=', '+', '-', '*', '/', '%', '<', '>', '|', '&', '!', '?', ':']
 
 -- opPrecedence :: Op -> Int
 -- opPrecedence op = case op of

@@ -1,8 +1,9 @@
-module Token (Token (..), make, identChars, identBeginChars, whiteChars) where
+module Token (Token (..), make) where
 
 import Data.Char (isDigit)
 import Op (Op)
 import Op qualified (Op (..))
+import CharClasses qualified as CC
 
 data Token
   = Type Type
@@ -166,9 +167,6 @@ isNumberLiteral "" = False
 isNumberLiteral (c : "") = isDigit c
 isNumberLiteral (c : cs) = isDigit c && isNumberLiteral cs
 
--- strLitForbiddenChars :: [Char]
--- strLitForbiddenChars = ['\n']
-
 isStringLiteral :: String -> Bool
 isStringLiteral ('"' : cs) = case cs of
   "" -> False
@@ -181,21 +179,12 @@ isStringLiteral _ = False
 --   _ -> last cs == '>'
 -- isImplHeader _ = False
 
-identBeginChars :: [Char]
-identBeginChars = ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']
-
-identChars :: [Char]
-identChars = identBeginChars ++ ['0' .. '9']
-
 isIdentifier :: String -> Bool
 isIdentifier "" = False
-isIdentifier (c : "") = c `elem` identChars
-isIdentifier (c : cs) = c `elem` identChars && isIdentifier cs
-
-whiteChars :: [Char]
-whiteChars = [' ', '\n']
+isIdentifier (c : "") = c `elem` CC.identifier
+isIdentifier (c : cs) = c `elem` CC.identifier && isIdentifier cs
 
 isWhitespace :: String -> Bool
 isWhitespace "" = True
-isWhitespace (c : cs) | c `elem` whiteChars = isWhitespace cs
+isWhitespace (c : cs) | c `elem` CC.whitespace = isWhitespace cs
 isWhitespace _ = False
