@@ -67,7 +67,11 @@ executable compiler
         Op,
         Token,
         Cursor,
-        CharClasses
+        CharClasses,
+        Structures,
+        Parser,
+        Type,
+        Identifier,
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

@@ -1,4 +1,4 @@
-module Op (Op(..)) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary) where
 
 data Op
   = Not
@@ -43,6 +43,64 @@ data Op
   | Index
   | Sizeof
   deriving (Show, Eq)
+
+unaryPre :: [Op]
+unaryPre = [Not, AddOrPlus, MultOrIndir, SubOrNeg, BitNot, Increment, Decrement, Sizeof]
+
+isUnaryPre :: Op -> Bool
+isUnaryPre op = op `elem` unaryPre
+
+unaryPost :: [Op]
+unaryPost = [Call, Index, Increment, Decrement]
+
+isUnaryPost :: Op -> Bool
+isUnaryPost op = op `elem` unaryPost
+
+binary :: [Op]
+binary =
+  [ AddOrPlus,
+    AddAssign,
+    MultOrIndir,
+    MultAssign,
+    Div,
+    DivAssign,
+    SubOrNeg,
+    SubAssign,
+    Mod,
+    ModAssign,
+    Equal,
+    NotEqual,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+    BoolAnd,
+    BoolOr,
+    BitOr,
+    BitOrAssign,
+    BitAndOrAddr,
+    BitAndAssign,
+    BitXor,
+    BitXorAssign,
+    LShift,
+    LShiftAssign,
+    RShift,
+    RShiftAssign,
+    Assign,
+    Deref,
+    StructRef,
+    Call,
+    Comma
+  ]
+
+isBinary :: Op -> Bool
+isBinary op = op `elem` binary
+
+ternary :: [Op]
+ternary = [TernaryThen, TernaryElse]
+
+isTernary :: Op -> Bool
+isTernary op = op `elem` ternary
 
 -- opPrecedence :: Op -> Int
 -- opPrecedence op = case op of

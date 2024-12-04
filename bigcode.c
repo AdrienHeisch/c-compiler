@@ -1,14 +1,14 @@
-// Imports
+/* // Imports
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // WHAT
 
-/* OH
+OH
 
 LOOK AT THIS COMMENT
-*/
+
 
 // Define a structure
 struct Student {
@@ -22,12 +22,12 @@ void printStudent(struct Student *s);
 void sortStudents(struct Student *students, int count);
 void writeToFile(struct Student *students, int count, const char *filename);
 void readFromFile(struct Student *students, int *count, const char *filename);
-
+*/
 int main() {
     // Variable declarations
     struct Student students[100];
     int count = 0;
-    char filename[] = "students.txt";
+    char filename[13] = "students.txt";
 
     // Input student data
     printf("Enter number of students: ");

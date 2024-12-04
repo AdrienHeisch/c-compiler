@@ -1,2 +1,4 @@
-int aaaaaaa=7;
-int _var2=7;
+int main() {
+    {7, 2+2};
+    return 0;
+}

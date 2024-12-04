@@ -1,15 +1,17 @@
-module Token (Token (..), make) where
+module Token (Token (..), Delimiter (..), make) where
 
+import CharClasses qualified as CC
 import Data.Char (isDigit)
 import Op (Op)
 import Op qualified (Op (..))
-import CharClasses qualified as CC
+import Type (Type (..))
+import Identifier qualified
 
 data Token
   = Type Type
   | Op Op
-  | Id String
-  | NumLiteral Int
+  | Id Identifier.Id
+  | NumLiteral String
   | StrLiteral String
   | ImplInclude String
   | Const
@@ -41,16 +43,6 @@ data Delimiter
   = Pr
   | Br
   | SqBr
-  deriving (Show, Eq)
-
-data Type
-  = Void
-  | Char
-  | Short
-  | Int
-  | Long
-  | Float
-  | Double
   deriving (Show, Eq)
 
 make :: String -> Token
@@ -156,8 +148,8 @@ make str = case str of
   "false" -> keywordUnimplErr str
   "true" -> keywordUnimplErr str
   _ | isStringLiteral str -> StrLiteral (tail (take (length str - 1) str))
-  _ | isIdentifier str -> Id str
-  _ | isNumberLiteral str -> NumLiteral (read str)
+  _ | isNumberLiteral str -> NumLiteral str
+  _ | isIdentifier str -> Id (Identifier.Id str)
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
   _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
