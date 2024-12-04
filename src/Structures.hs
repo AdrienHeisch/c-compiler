@@ -17,7 +17,7 @@ data Declaration
 data Statement
   = Empty
   | Expr Expr
-  | Var Type Id Expr
+  | Var Type Id (Maybe Expr)
   | Block [Statement]
   | If {cond :: Expr, then_ :: [Statement], else_ :: Maybe Expr}
   | Switch -- TODO

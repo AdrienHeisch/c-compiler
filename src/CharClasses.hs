@@ -1,10 +1,22 @@
 module CharClasses where
 
+digits :: [Char]
+digits = ['0' .. '9']
+
+lowercase :: [Char]
+lowercase = ['a' .. 'z']
+
+uppercase :: [Char]
+uppercase = ['A' .. 'Z']
+
+alphabet :: [Char]
+alphabet = lowercase ++ uppercase
+
 identifierStart :: [Char]
-identifierStart = ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']
+identifierStart = lowercase ++ uppercase ++ ['_']
 
 identifier :: [Char]
-identifier = identifierStart ++ ['0' .. '9']
+identifier = identifierStart ++ digits
 
 punctuators :: [Char]
 punctuators = ['=', '+', '-', '*', '/', '%', '<', '>', '|', '&', '!', '?', ':']

@@ -1,5 +1,7 @@
 module Type (Type (..)) where
 
+import Identifier (Id)
+
 data Type
   = Void
   | Char
@@ -10,4 +12,5 @@ data Type
   | Double
   | Pointer Type
   | Array Type Int
+  | Struct Id
   deriving (Show, Eq)

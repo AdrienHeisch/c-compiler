@@ -4,7 +4,8 @@ import CharClasses qualified as CC
 import Data.Char (isDigit)
 import Op (Op)
 import Op qualified (Op (..))
-import Type (Type (..))
+import Type (Type)
+import Type qualified (Type (..))
 import Identifier qualified
 
 data Token
@@ -48,14 +49,14 @@ data Delimiter
 make :: String -> Token
 make str = case str of
   ";" -> Semicolon
-  "void" -> Type Void
+  "void" -> Type Type.Void
   "bool" -> keywordUnimplErr str
-  "char" -> Type Char
-  "short" -> Type Short
-  "int" -> Type Int
-  "long" -> Type Long
-  "float" -> Type Float
-  "double" -> Type Double
+  "char" -> Type Type.Char
+  "short" -> Type Type.Short
+  "int" -> Type Type.Int
+  "long" -> Type Type.Long
+  "float" -> Type Type.Float
+  "double" -> Type Type.Double
   "signed" -> keywordUnimplErr str
   "unsigned" -> keywordUnimplErr str
   "auto" -> keywordUnimplErr str

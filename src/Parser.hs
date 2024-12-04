@@ -63,9 +63,13 @@ collectStatement = collectUntil Token.Semicolon
 
 parseStatement :: [Token] -> Statement
 parseStatement [] = Statement.Empty
-parseStatement (Token.Type ty : Token.Id name : Token.Op Op.Assign : exprTks) = Statement.Var ty name (parseExpr exprTks)
+parseStatement (Token.Struct : Token.Id name : tks) = parseStatement (Token.Type (Type.Struct name) : tks)
+parseStatement [Token.Type ty, Token.Id name] = Statement.Var ty name Nothing
+parseStatement (Token.Type ty : Token.Id name : Token.Op Op.Assign : exprTks) = Statement.Var ty name (Just (parseExpr exprTks))
+parseStatement [Token.Type ty, Token.Id name, Token.DelimOpen Delimiter.SqBr, Token.NumLiteral len, Token.DelimClose Delimiter.SqBr] =
+  Statement.Var (Type.Array ty (read len)) name Nothing
 parseStatement (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral len : Token.DelimClose Delimiter.SqBr : Token.Op Op.Assign : exprTks) =
-  Statement.Var (Type.Array ty (read len)) name (parseExpr exprTks)
+  Statement.Var (Type.Array ty (read len)) name (Just (parseExpr exprTks))
 parseStatement [Token.Return] = Statement.Return Nothing
 parseStatement (Token.Return : exprTks) = Statement.Return (Just (parseExpr exprTks))
 parseStatement tokens = Statement.Expr (parseExpr tokens)
@@ -102,7 +106,7 @@ parseDirective _ = Declaration.Directive
 collectFuncDec :: [Token] -> ([Token], [Token])
 collectFuncDec = collectUntilDelimiter Delimiter.Br
 
-parseFuncDec :: Type -> Id -> [Token] -> Declaration
+parseFuncDec :: Type -> Identifier.Id -> [Token] -> Declaration
 parseFuncDec ty name body = Declaration.FuncDec ty name (parseStatementList body)
 
 collectStruct :: [Token] -> ([Token], [Token])
