@@ -1,8 +1,5 @@
 module CharClasses where
 
-whitespace :: [Char]
-whitespace = [' ', '\n']
-
 identifierStart :: [Char]
 identifierStart = ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_']
 

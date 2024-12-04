@@ -11,6 +11,7 @@ data Token
   | Id String
   | NumLiteral Int
   | StrLiteral String
+  | ImplInclude String
   | Const
   | If
   | Else
@@ -31,8 +32,9 @@ data Token
   | DelimOpen Delimiter
   | DelimClose Delimiter
   | Directive
-  | Eof
+  | NL
   | Nil
+  | Eof
   deriving (Show, Eq)
 
 data Delimiter
@@ -156,6 +158,7 @@ make str = case str of
   _ | isStringLiteral str -> StrLiteral (tail (take (length str - 1) str))
   _ | isIdentifier str -> Id str
   _ | isNumberLiteral str -> NumLiteral (read str)
+  _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
   _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
 
@@ -186,5 +189,11 @@ isIdentifier (c : cs) = c `elem` CC.identifier && isIdentifier cs
 
 isWhitespace :: String -> Bool
 isWhitespace "" = True
-isWhitespace (c : cs) | c `elem` CC.whitespace = isWhitespace cs
+isWhitespace (' ' : cs) = isWhitespace cs
 isWhitespace _ = False
+
+isNewLine :: String -> Bool
+isNewLine "" = False
+isNewLine ('\n' : "") = True
+isNewLine ('\n' : cs) = isNewLine cs
+isNewLine _ = False

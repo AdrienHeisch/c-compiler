@@ -5,11 +5,20 @@ import Cursor (Cursor (Cursor))
 import Cursor qualified (end, expand, idx, len)
 import Data.Text as Text (Text)
 import Data.Text qualified as Text (drop, index, length, take, unpack)
+import Op qualified
 import Token (Token)
 import Token qualified
 
 lex :: Text -> [Token]
-lex text = lexFrom text 0
+lex text = reduceTokens (lexFrom text 0)
+
+reduceTokens :: [Token] -> [Token]
+reduceTokens [] = []
+reduceTokens [tk] = [tk]
+reduceTokens (Token.NL : Token.NL : tks) = reduceTokens (Token.NL : tks)
+reduceTokens (Token.Op Op.Lt : Token.Id str : Token.Op Op.StructRef : Token.Id str' : Token.Op Op.Gt : tks) =
+  reduceTokens (Token.ImplInclude (str ++ "." ++ str') : tks)
+reduceTokens (tk : tks) = tk : reduceTokens tks
 
 lexFrom :: Text -> Int -> [Token]
 lexFrom text from =
@@ -33,7 +42,8 @@ getCursor text first cursor = case first of
   _ | first `elem` CC.identifierStart -> getIdent
   _ | first `elem` CC.punctuators -> getPunct
   _ | first == '"' -> getStrLit
-  _ | first `elem` CC.whitespace -> getWhite
+  _ | first == ' ' -> getWhite
+  _ | first == '\n' -> getNewLine
   _ -> cursor
   where
     getCursorNext = getCursor text first
@@ -41,13 +51,16 @@ getCursor text first cursor = case first of
       c | c `elem` CC.identifier -> getCursorNext (Cursor.expand cursor)
       _ -> cursor
     getPunct = case Text.index text (Cursor.end cursor) of
-      c | c `elem` CC.punctuators -> getCursorNext (Cursor.expand cursor)
+      c | c `elem` CC.punctuators && Cursor.len cursor < 2 -> getCursorNext (Cursor.expand cursor)
       _ -> cursor
     getStrLit = case Text.index text (Cursor.end cursor) of
       c | c == '"' -> Cursor.expand cursor
       _ -> getCursorNext (Cursor.expand cursor)
     getWhite = case Text.index text (Cursor.end cursor) of
-      c | c `elem` CC.whitespace -> getCursorNext (Cursor.expand cursor)
+      c | c == ' ' -> getCursorNext (Cursor.expand cursor)
+      _ -> cursor
+    getNewLine = case Text.index text (Cursor.end cursor) of
+      c | c == '\n' -> getCursorNext (Cursor.expand cursor)
       _ -> cursor
 
 readCursor :: Text -> Cursor -> String
@@ -58,5 +71,5 @@ skipLine text idx | idx >= Text.length text || Text.index text idx == '\n' = idx
 skipLine text idx = skipLine text (idx + 1)
 
 skipBlock :: Text -> Int -> Int
-skipBlock text idx | idx + 1 >= Text.length text || readCursor text (Cursor idx 2) == "*/" = idx + 1
+skipBlock text idx | idx + 1 >= Text.length text || readCursor text (Cursor idx 2) == "*/" = idx + 2
 skipBlock text idx = skipBlock text (idx + 1)
