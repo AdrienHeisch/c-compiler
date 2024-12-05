@@ -105,6 +105,7 @@ parseExpr (Token.StrLiteral str : rest) = parseExprNext (Expr.StrLiteral str) re
 parseExpr (Token.Id identifier : rest) = parseExprNext (Expr.Id identifier) rest
 parseExpr (Token.Op op : rest) | Op.isUnaryPre op = Expr.UnopPre op (parseExpr rest)
 parseExpr (Token.DelimOpen Delimiter.Br : rest) = Expr.ArrayDecl (parseExprList (collectArrayDecl rest))
+parseExpr (Token.DelimOpen Delimiter.Pr : rest) = Expr.Parenthese (parseExpr (collectParenthese rest))
 parseExpr tokens = Expr.Invalid ("Invalid expression : " ++ show tokens)
 
 parseExprNext :: Expr -> [Token] -> Expr
@@ -117,6 +118,9 @@ parseExprNext expr tokens = Expr.Invalid ("Invalid follow expression : " ++ show
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Br tokens in tokens'
+
+collectParenthese :: [Token] -> [Token]
+collectParenthese tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Pr tokens in tokens'
 
 collectArguments :: [Token] -> [Token]
 collectArguments tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Pr tokens in tokens'
