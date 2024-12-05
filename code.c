@@ -1,16 +1,10 @@
 int main() {
     int a = 1;
 
-    switch (a) {
-        case 0:
-            a = 1;
-            break;
-        case 1:
-            a = 0;
-            break;
-        //default:
-            return 1;
-    }
+mylabel:
+    a = 2;
+
+    goto mylabel;
 
     return 0;
 }

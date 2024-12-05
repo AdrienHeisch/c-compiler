@@ -124,9 +124,17 @@ parseStatement (Token.Return : rest) =
   case collectUntil Token.Semicolon rest of
     ([], rest') -> (Statement.Return Nothing, rest')
     (tokens, rest') -> (Statement.Return (Just (parseExpr tokens)), rest')
+parseStatement (Token.Goto : Token.Id label : Token.Semicolon : rest) = (Statement.Goto label, rest)
 parseStatement (Token.Break : Token.Semicolon : rest) = (Statement.Break, rest)
 parseStatement (Token.Continue : Token.Semicolon : rest) = (Statement.Continue, rest)
 parseStatement (Token.Case : Token.NumLiteral constant@(Constant Type.Int _) : Token.Op Op.TernaryElse : rest) = (Statement.Case constant, rest) -- TODO any integer type for case
+parseStatement (Token.Id label : Token.Op Op.TernaryElse : rest) =
+  case rest of
+    (Token.NL : Token.Id _ : Token.Op Op.TernaryElse : _) -> (Statement.Labeled label Statement.Empty, rest)
+    (Token.Id _ : Token.Op Op.TernaryElse : _) -> (Statement.Labeled label Statement.Empty, rest)
+    _ ->
+      let (statement, rest') = parseStatement rest
+       in (Statement.Labeled label statement, rest')
 parseStatement (Token.Type ty : Token.Id name : tokens) = simpleStatement (parseVarStatement ty name) tokens
 parseStatement tokens = simpleStatement (Statement.Expr . parseExpr) tokens
 
@@ -147,6 +155,7 @@ parseExprList tokens = let (expr, rest) = collectUntil (Token.Op Op.Comma) token
 
 parseExpr :: [Token] -> Expr
 parseExpr [] = Expr.Invalid "Empty expression"
+parseExpr (Token.NL : rest) = parseExpr rest
 parseExpr (Token.NumLiteral (Constant Type.Int (IntRepr num)) : rest) = parseExprNext (Expr.NumLiteral num) rest
 parseExpr (Token.StrLiteral (Constant (Type.Array Type.Char _) (StrRepr str)) : rest) = parseExprNext (Expr.StrLiteral str) rest
 parseExpr (Token.Id identifier : rest) = parseExprNext (Expr.Id identifier) rest

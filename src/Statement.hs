@@ -1,9 +1,9 @@
 module Statement (Statement (..)) where
 
+import Constant (Constant, IntRepr)
 import Expr (Expr)
 import Identifier (Id)
 import Type (Type (..))
-import Constant (Constant, IntRepr)
 
 data Statement
   = Empty
@@ -20,7 +20,7 @@ data Statement
   | Continue
   | Return (Maybe Expr)
   | Case (Constant IntRepr)
-  | Goto -- TODO
-  | Label -- TODO
+  | Goto Id
+  | Labeled Id Statement
   | Invalid String
   deriving (Show)
