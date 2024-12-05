@@ -10,6 +10,8 @@ import Type qualified (Type (..))
 
 data Token
   = Type Type
+  | Signed
+  | Unsigned
   | Op Op
   | Id Identifier.Id
   | IntLiteral (Constant IntRepr)
@@ -52,15 +54,15 @@ make :: String -> Token
 make str = case str of
   ";" -> Semicolon
   "void" -> Type Type.Void
-  "bool" -> keywordUnimplErr str
+  "bool" -> Type Type.Bool
   "char" -> Type Type.Char
   "short" -> Type Type.Short
   "int" -> Type Type.Int
   "long" -> Type Type.Long
   "float" -> Type Type.Float
   "double" -> Type Type.Double
-  "signed" -> keywordUnimplErr str
-  "unsigned" -> keywordUnimplErr str
+  "signed" -> Signed
+  "unsigned" -> Unsigned
   "auto" -> keywordUnimplErr str
   "const" -> Const
   "static" -> keywordUnimplErr str

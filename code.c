@@ -1,5 +1,5 @@
 int main() {
-    float a = "1.2";
+    bool a = 0;
 
     return 0;
 }

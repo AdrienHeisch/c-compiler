@@ -8,7 +8,7 @@ import Op (Op (..), isBinary, isUnaryPost, isUnaryPre, precedence)
 import Statement (Statement (..))
 import Token (Token (..))
 import Token as Delimiter (Delimiter (..))
-import Type (Type, isInteger, isFloating)
+import Type (Type, signed, unsigned, isInteger, isFloating)
 import Type qualified (Type (..))
 import Utils (listToMaybeList)
 
@@ -17,6 +17,8 @@ parse tokens = parseDeclarations (staticParse tokens)
 
 staticParse :: [Token] -> [Token]
 staticParse [] = []
+staticParse (Token.Signed : Token.Type ty : rest) = staticParse (Token.Type (signed ty) : rest)
+staticParse (Token.Unsigned : Token.Type ty : rest) = staticParse (Token.Type (unsigned ty) : rest)
 staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.IntLiteral (Constant Type.Int len) : Token.DelimClose Delimiter.SqBr : rest) =
   -- TODO any integer type as length
