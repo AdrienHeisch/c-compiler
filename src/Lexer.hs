@@ -30,41 +30,48 @@ lexFrom text from =
 takeToken :: Text -> Int -> (Token, Int)
 takeToken text from | from >= Text.length text = (Token.Eof, from)
 takeToken text from =
-  let (first, cursor) = (Text.index text from, Cursor from 1)
-   in let cursor' = getCursor text first cursor
-       in case readCursor text cursor' of
-            "//" -> (Token.Nil, skipLine text (Cursor.end cursor'))
-            "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor'))
-            str -> (Token.make str, Cursor.end cursor')
+   let cursor = getCursor text (Text.index text from) from
+       in case readCursor text cursor of
+            "//" -> (Token.Nil, skipLine text (Cursor.end cursor))
+            "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor))
+            str -> (Token.make str, Cursor.end cursor)
 
-getCursor :: Text -> Char -> Cursor -> Cursor
-getCursor text first cursor = case first of
-  _ | first `elem` CC.identifierStart -> getIdent
-  _ | first `elem` CC.digits -> getNumLit
-  _ | first `elem` CC.punctuators -> getPunct
-  '"' -> getStrLit
-  ' ' -> getWhite
-  '\n' -> getNewLine
-  _ -> cursor
+getCursor :: Text -> Char -> Int -> Cursor
+getCursor text first idx = do
+  let crsr = makeCursor idx
+  case first of
+    _ | first `elem` CC.identifierStart -> getIdent crsr
+    _ | first `elem` CC.digits -> getNumLit crsr
+    _ | first `elem` CC.punctuators -> getPunct crsr
+    '"' -> getStrLit crsr
+    '\'' -> getCharLit crsr
+    ' ' -> getWhite crsr
+    '\n' -> getNewLine crsr
+    _ -> crsr
   where
-    getCursorNext = getCursor text first
-    getIdent = case Text.index text (Cursor.end cursor) of
-      c | c `elem` CC.identifier -> getCursorNext (Cursor.expand cursor)
+    makeCursor start_idx = Cursor start_idx 1
+    peek cursor = Text.index text (Cursor.end cursor)
+    getIdent cursor = case peek cursor of
+      c | c `elem` CC.identifier -> getIdent $ Cursor.expand cursor
       _ -> cursor
-    getNumLit = case Text.index text (Cursor.end cursor) of
-      c | c `elem` CC.float -> getCursorNext (Cursor.expand cursor)
+    getNumLit cursor = case peek cursor of
+      c | c `elem` CC.float -> getNumLit $ Cursor.expand cursor
       _ -> cursor
-    getPunct = case Text.index text (Cursor.end cursor) of
-      c | c `elem` CC.punctuators && Cursor.len cursor < 2 -> getCursorNext (Cursor.expand cursor)
+    getPunct cursor = case peek cursor of
+      c | c `elem` CC.punctuators && Cursor.len cursor < 2 -> getPunct $ Cursor.expand cursor
       _ -> cursor
-    getStrLit = case Text.index text (Cursor.end cursor) of
+    getStrLit cursor = case peek cursor of
       c | c == '"' -> Cursor.expand cursor
-      _ -> getCursorNext (Cursor.expand cursor)
-    getWhite = case Text.index text (Cursor.end cursor) of
-      c | c == ' ' -> getCursorNext (Cursor.expand cursor)
+      _ -> getStrLit $ Cursor.expand cursor
+    getCharLit cursor = case peek cursor of
+      '\'' -> Cursor.expand cursor
+      '\\' -> getCharLit $ Cursor.expand $ Cursor.expand cursor
+      _ -> getCharLit $ Cursor.expand cursor
+    getWhite cursor = case peek cursor of
+      c | c == ' ' -> getWhite $ Cursor.expand cursor
       _ -> cursor
-    getNewLine = case Text.index text (Cursor.end cursor) of
-      c | c == '\n' -> getCursorNext (Cursor.expand cursor)
+    getNewLine cursor = case peek cursor of
+      c | c == '\n' -> getNewLine $ Cursor.expand cursor
       _ -> cursor
 
 readCursor :: Text -> Cursor -> String

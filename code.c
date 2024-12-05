@@ -1,5 +1,5 @@
 int main() {
-    bool a = false;
+    char a = '\xFF';
 
     return 0;
 }

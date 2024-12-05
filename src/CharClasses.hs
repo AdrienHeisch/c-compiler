@@ -24,5 +24,16 @@ identifier = identifierStart ++ digits
 punctuators :: [Char]
 punctuators = ['=', '+', '-', '*', '/', '%', '<', '>', '|', '&', '!', '?', ':']
 
--- strLitForbiddenChars :: [Char]
--- strLitForbiddenChars = ['\n']
+escape :: [Char]
+escape =
+  [ '\n',
+    '\r',
+    '\t',
+    '\v',
+    '\b',
+    '\a',
+    '\'',
+    '\"',
+    '\\',
+    '\0'
+  ]

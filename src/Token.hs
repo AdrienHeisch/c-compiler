@@ -7,6 +7,8 @@ import Op (Op)
 import Op qualified (Op (..))
 import Type (Type)
 import Type qualified (Type (..))
+import Data.Char (ord)
+import Debug.Trace (trace)
 
 data Token
   = Type Type
@@ -154,6 +156,7 @@ make str = case str of
   "false" -> BoolLiteral $ Constant Type.Bool False
   "true" -> BoolLiteral $ Constant Type.Bool True
   _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (tail (take (length str - 1) str))
+  _ | isCharLiteral str -> IntLiteral $ Constant Type.Char (ord $ read $ trace str str)
   _ | isIntLiteral str -> IntLiteral $ Constant Type.Int (read str)
   _ | isFltLiteral str -> FltLiteral $ Constant Type.Float (read str)
   _ | isIdentifier str -> Id (Identifier.Id str)
@@ -182,6 +185,18 @@ isStringLiteral ('"' : cs) = case cs of
   "" -> False
   _ -> last cs == '"'
 isStringLiteral _ = False
+
+isCharLiteral :: String -> Bool
+isCharLiteral "\'" = False
+isCharLiteral "\'\'" = False
+isCharLiteral ('\'' : cs) = last cs == '\''{-  && continue cs -}
+  -- where 
+  --   continue "" = False
+  --   continue ('\\' : cs') = esc cs'
+  --   continue (c' : cs') = False
+  --   esc "" = False
+  --   -- esc (c' : cs') = 
+isCharLiteral _ = False
 
 isIdentifier :: String -> Bool
 isIdentifier "" = False
