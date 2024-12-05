@@ -1,13 +1,13 @@
-module Constant (Constant (..), IntRepr (..), StrRepr (..)) where
+module Constant (Constant (..), IntRepr, StrRepr, FltRepr) where
 
 import Type (Type)
 
-data Constant t
-  = Constant {ty :: Type, val :: t}
+data Constant repr
+  = Constant {ty :: Type, val :: repr}
   deriving (Show, Eq)
 
-newtype IntRepr = IntRepr Int
-  deriving (Show, Eq)
+type IntRepr = Int
 
-newtype StrRepr = StrRepr String
-  deriving (Show, Eq)
+type FltRepr = Float
+
+type StrRepr = String

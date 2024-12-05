@@ -1,10 +1,5 @@
 int main() {
-    int a = 1;
-
-mylabel:
-    a = 2;
-
-    goto mylabel;
+    float a = "1.2";
 
     return 0;
 }

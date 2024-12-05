@@ -6,6 +6,8 @@ main :: IO ()
 main = do
   source <- TIO.readFile "code.c"
   let tokens = Lexer.lex source
-  -- print ("Lexer : " ++ show tokens)
+  putStrLn "Lexer : "
+  print tokens
   let topLevel = Parser.parse tokens
+  putStrLn "Parser : "
   print topLevel

@@ -2,11 +2,13 @@ module Expr (Expr (..)) where
 
 import Identifier (Id)
 import Op (Op)
+import Constant (Constant, IntRepr, FltRepr, StrRepr)
 
 data Expr
   = Id Id
-  | NumLiteral Int
-  | StrLiteral String
+  | IntLiteral (Constant IntRepr)
+  | FltLiteral (Constant FltRepr)
+  | StrLiteral (Constant StrRepr)
   | ArrayDecl [Expr]
   | UnopPre {op :: Op, expr :: Expr}
   | UnopPost {op :: Op, expr :: Expr}

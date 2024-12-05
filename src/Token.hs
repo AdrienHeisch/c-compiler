@@ -1,19 +1,19 @@
 module Token (Token (..), Delimiter (..), make) where
 
 import CharClasses qualified as CC
-import Data.Char (isDigit)
+import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Identifier qualified
 import Op (Op)
 import Op qualified (Op (..))
 import Type (Type)
 import Type qualified (Type (..))
-import Constant (Constant(..), IntRepr(IntRepr), StrRepr(StrRepr))
 
 data Token
   = Type Type
   | Op Op
   | Id Identifier.Id
-  | NumLiteral (Constant IntRepr) -- TODO float
+  | IntLiteral (Constant IntRepr)
+  | FltLiteral (Constant FltRepr)
   | StrLiteral (Constant StrRepr)
   | ImplInclude String
   | Const
@@ -150,8 +150,9 @@ make str = case str of
   "#" -> Directive
   "false" -> keywordUnimplErr str
   "true" -> keywordUnimplErr str
-  _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (StrRepr $ tail (take (length str - 1) str))
-  _ | isNumberLiteral str -> NumLiteral $ Constant Type.Int (IntRepr $ read str)
+  _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (tail (take (length str - 1) str))
+  _ | isIntLiteral str -> IntLiteral $ Constant Type.Int (read str)
+  _ | isFltLiteral str -> FltLiteral $ Constant Type.Float (read str)
   _ | isIdentifier str -> Id (Identifier.Id str)
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
@@ -160,22 +161,24 @@ make str = case str of
 keywordUnimplErr :: String -> a
 keywordUnimplErr keyword = error ("Unimplemented keyword : " ++ keyword)
 
-isNumberLiteral :: String -> Bool
-isNumberLiteral "" = False
-isNumberLiteral (c : "") = isDigit c
-isNumberLiteral (c : cs) = isDigit c && isNumberLiteral cs
+isIntLiteral :: String -> Bool
+isIntLiteral "" = False
+isIntLiteral (c : "") = c `elem` CC.digits
+isIntLiteral (c : cs) = c `elem` CC.digits && isIntLiteral cs
+
+isFltLiteral :: String -> Bool
+isFltLiteral "" = False
+isFltLiteral (c : cs) = c `elem` CC.digits && continue cs
+  where
+    continue "" = False
+    continue (c' : "") = c' `elem` CC.float
+    continue (c' : cs') = c' `elem` CC.float && continue cs'
 
 isStringLiteral :: String -> Bool
 isStringLiteral ('"' : cs) = case cs of
   "" -> False
   _ -> last cs == '"'
 isStringLiteral _ = False
-
--- isImplHeader :: String -> Bool
--- isImplHeader ('<' : cs) = case cs of
---   "" -> False
---   _ -> last cs == '>'
--- isImplHeader _ = False
 
 isIdentifier :: String -> Bool
 isIdentifier "" = False

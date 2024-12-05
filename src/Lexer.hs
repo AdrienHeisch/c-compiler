@@ -40,7 +40,7 @@ takeToken text from =
 getCursor :: Text -> Char -> Cursor -> Cursor
 getCursor text first cursor = case first of
   _ | first `elem` CC.identifierStart -> getIdent
-  _ | first `elem` CC.digits -> getInt
+  _ | first `elem` CC.digits -> getNumLit
   _ | first `elem` CC.punctuators -> getPunct
   '"' -> getStrLit
   ' ' -> getWhite
@@ -51,8 +51,8 @@ getCursor text first cursor = case first of
     getIdent = case Text.index text (Cursor.end cursor) of
       c | c `elem` CC.identifier -> getCursorNext (Cursor.expand cursor)
       _ -> cursor
-    getInt = case Text.index text (Cursor.end cursor) of
-      c | c `elem` CC.digits -> getCursorNext (Cursor.expand cursor)
+    getNumLit = case Text.index text (Cursor.end cursor) of
+      c | c `elem` CC.float -> getCursorNext (Cursor.expand cursor)
       _ -> cursor
     getPunct = case Text.index text (Cursor.end cursor) of
       c | c `elem` CC.punctuators && Cursor.len cursor < 2 -> getCursorNext (Cursor.expand cursor)

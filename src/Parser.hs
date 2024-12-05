@@ -1,6 +1,6 @@
 module Parser (parse) where
 
-import Constant (Constant (..), IntRepr (IntRepr), StrRepr (StrRepr))
+import Constant (Constant (..))
 import Declaration (Declaration (..))
 import Expr (Expr (..))
 import Identifier (Id)
@@ -8,7 +8,7 @@ import Op (Op (..), isBinary, isUnaryPost, isUnaryPre, precedence)
 import Statement (Statement (..))
 import Token (Token (..))
 import Token as Delimiter (Delimiter (..))
-import Type (Type)
+import Type (Type, isInteger, isFloating)
 import Type qualified (Type (..))
 import Utils (listToMaybeList)
 
@@ -18,7 +18,7 @@ parse tokens = parseDeclarations (staticParse tokens)
 staticParse :: [Token] -> [Token]
 staticParse [] = []
 staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
-staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral (Constant Type.Int (IntRepr len)) : Token.DelimClose Delimiter.SqBr : rest) =
+staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.IntLiteral (Constant Type.Int len) : Token.DelimClose Delimiter.SqBr : rest) =
   -- TODO any integer type as length
   staticParse (Token.Type (Type.Array ty len) : name : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
@@ -127,7 +127,7 @@ parseStatement (Token.Return : rest) =
 parseStatement (Token.Goto : Token.Id label : Token.Semicolon : rest) = (Statement.Goto label, rest)
 parseStatement (Token.Break : Token.Semicolon : rest) = (Statement.Break, rest)
 parseStatement (Token.Continue : Token.Semicolon : rest) = (Statement.Continue, rest)
-parseStatement (Token.Case : Token.NumLiteral constant@(Constant Type.Int _) : Token.Op Op.TernaryElse : rest) = (Statement.Case constant, rest) -- TODO any integer type for case
+parseStatement (Token.Case : Token.IntLiteral constant@(Constant Type.Int _) : Token.Op Op.TernaryElse : rest) = (Statement.Case constant, rest) -- TODO any integer type for case
 parseStatement (Token.Id label : Token.Op Op.TernaryElse : rest) =
   case rest of
     (Token.NL : Token.Id _ : Token.Op Op.TernaryElse : _) -> (Statement.Labeled label Statement.Empty, rest)
@@ -156,8 +156,9 @@ parseExprList tokens = let (expr, rest) = collectUntil (Token.Op Op.Comma) token
 parseExpr :: [Token] -> Expr
 parseExpr [] = Expr.Invalid "Empty expression"
 parseExpr (Token.NL : rest) = parseExpr rest
-parseExpr (Token.NumLiteral (Constant Type.Int (IntRepr num)) : rest) = parseExprNext (Expr.NumLiteral num) rest
-parseExpr (Token.StrLiteral (Constant (Type.Array Type.Char _) (StrRepr str)) : rest) = parseExprNext (Expr.StrLiteral str) rest
+parseExpr (Token.IntLiteral constant : rest) | Type.isInteger $ Constant.ty constant = parseExprNext (Expr.IntLiteral constant) rest
+parseExpr (Token.FltLiteral constant : rest) | Type.isFloating $ Constant.ty constant = parseExprNext (Expr.FltLiteral constant) rest
+parseExpr (Token.StrLiteral constant@(Constant (Type.Array Type.Char _) _) : rest) = parseExprNext (Expr.StrLiteral constant) rest
 parseExpr (Token.Id identifier : rest) = parseExprNext (Expr.Id identifier) rest
 parseExpr (Token.Op op : rest) | Op.isUnaryPre op = Expr.UnopPre op (parseExpr rest)
 parseExpr (Token.DelimOpen Delimiter.Br : rest) = Expr.ArrayDecl (parseExprList (collectArrayDecl rest))

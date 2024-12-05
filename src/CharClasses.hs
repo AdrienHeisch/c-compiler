@@ -3,6 +3,9 @@ module CharClasses where
 digits :: [Char]
 digits = ['0' .. '9']
 
+float :: [Char]
+float = digits ++ ['.']
+
 lowercase :: [Char]
 lowercase = ['a' .. 'z']
 
