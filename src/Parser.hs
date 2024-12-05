@@ -203,7 +203,7 @@ parseDirective _ = Declaration.Directive
 collectParameters :: [Token] -> ([(Type, Id)], [Token])
 collectParameters [] = ([], [])
 collectParameters tokens =
-  let (tokens', rest) = collectUntil (Token.DelimClose Delimiter.Pr) tokens
+  let (tokens', rest) = collectUntilDelimiter Delimiter.Pr tokens
    in (makeList tokens', rest)
   where
     makeList :: [Token] -> [(Type, Id)]
