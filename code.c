@@ -1,5 +1,5 @@
 int main() {
-    bool a = 0;
+    bool a = false;
 
     return 0;
 }

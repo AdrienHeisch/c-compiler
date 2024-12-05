@@ -8,7 +8,7 @@ import Op (Op (..), isBinary, isUnaryPost, isUnaryPre, precedence)
 import Statement (Statement (..))
 import Token (Token (..))
 import Token as Delimiter (Delimiter (..))
-import Type (Type, signed, unsigned, isInteger, isFloating)
+import Type (Type, isFloating, isInteger, signed, unsigned)
 import Type qualified (Type (..))
 import Utils (listToMaybeList)
 
@@ -158,6 +158,7 @@ parseExprList tokens = let (expr, rest) = collectUntil (Token.Op Op.Comma) token
 parseExpr :: [Token] -> Expr
 parseExpr [] = Expr.Invalid "Empty expression"
 parseExpr (Token.NL : rest) = parseExpr rest
+parseExpr (Token.BoolLiteral constant@(Constant Type.Bool _) : rest) = parseExprNext (Expr.BoolLiteral constant) rest
 parseExpr (Token.IntLiteral constant : rest) | Type.isInteger $ Constant.ty constant = parseExprNext (Expr.IntLiteral constant) rest
 parseExpr (Token.FltLiteral constant : rest) | Type.isFloating $ Constant.ty constant = parseExprNext (Expr.FltLiteral constant) rest
 parseExpr (Token.StrLiteral constant@(Constant (Type.Array Type.Char _) _) : rest) = parseExprNext (Expr.StrLiteral constant) rest

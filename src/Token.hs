@@ -1,7 +1,7 @@
 module Token (Token (..), Delimiter (..), make) where
 
 import CharClasses qualified as CC
-import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
+import Constant (Constant (..), FltRepr, IntRepr, StrRepr, BoolRepr)
 import Identifier qualified
 import Op (Op)
 import Op qualified (Op (..))
@@ -17,6 +17,7 @@ data Token
   | IntLiteral (Constant IntRepr)
   | FltLiteral (Constant FltRepr)
   | StrLiteral (Constant StrRepr)
+  | BoolLiteral (Constant BoolRepr)
   | ImplInclude String
   | Const
   | If
@@ -150,8 +151,8 @@ make str = case str of
   "[" -> DelimOpen SqBr
   "]" -> DelimClose SqBr
   "#" -> Directive
-  "false" -> keywordUnimplErr str
-  "true" -> keywordUnimplErr str
+  "false" -> BoolLiteral $ Constant Type.Bool False
+  "true" -> BoolLiteral $ Constant Type.Bool True
   _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (tail (take (length str - 1) str))
   _ | isIntLiteral str -> IntLiteral $ Constant Type.Int (read str)
   _ | isFltLiteral str -> FltLiteral $ Constant Type.Float (read str)
