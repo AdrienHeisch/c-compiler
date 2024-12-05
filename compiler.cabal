@@ -73,7 +73,8 @@ executable compiler
         Identifier,
         Declaration,
         Statement,
-        Expr
+        Expr,
+        Utils
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

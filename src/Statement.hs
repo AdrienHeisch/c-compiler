@@ -11,9 +11,10 @@ data Statement
   | Block [Statement]
   | If {cond :: Expr, then_ :: Statement, else_ :: Maybe Statement}
   | Switch -- TODO
-  | For -- TODO
   | While {cond :: Expr, body :: Statement}
   | DoWhile {body :: Statement, cond :: Expr}
+  | For {fdecl :: Maybe Expr, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
+  | ForVar {decl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
   | Break
   | Continue
   | Return (Maybe Expr)
