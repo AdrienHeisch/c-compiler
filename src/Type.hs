@@ -12,5 +12,6 @@ data Type
   | Double
   | Pointer Type
   | Array Type Int
-  | Struct Id
+  | ArrayNoHint Type
+  | Struct (Maybe Id)
   deriving (Show, Eq)

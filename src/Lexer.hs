@@ -9,7 +9,6 @@ import Identifier (Id (Id))
 import Op qualified
 import Token (Token)
 import Token qualified
-import Type qualified
 
 lex :: Text -> [Token]
 lex text = reduceTokens (lexFrom text 0)
@@ -17,11 +16,10 @@ lex text = reduceTokens (lexFrom text 0)
 reduceTokens :: [Token] -> [Token]
 reduceTokens [] = []
 reduceTokens [tk] = [tk]
-reduceTokens (Token.NL : Token.NL : tks) = reduceTokens (Token.NL : tks)
-reduceTokens (Token.Type ty : Token.Op Op.MultOrIndir : tks) = reduceTokens (Token.Type (Type.Pointer ty) : tks)
-reduceTokens (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.StructRef : Token.Id (Id str') : Token.Op Op.Gt : tks) =
-  reduceTokens (Token.ImplInclude (str ++ "." ++ str') : tks)
-reduceTokens (tk : tks) = tk : reduceTokens tks
+reduceTokens (Token.NL : Token.NL : rest) = reduceTokens (Token.NL : rest)
+reduceTokens (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.StructRef : Token.Id (Id str') : Token.Op Op.Gt : rest) =
+  reduceTokens (Token.ImplInclude (str ++ "." ++ str') : rest)
+reduceTokens (tk : rest) = tk : reduceTokens rest
 
 lexFrom :: Text -> Int -> [Token]
 lexFrom text from =

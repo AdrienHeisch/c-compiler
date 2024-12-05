@@ -10,19 +10,39 @@ import Token as Delimiter (Delimiter (..))
 import Type (Type (..))
 
 parse :: [Token] -> [Declaration]
-parse [] = []
-parse [Eof] = []
-parse (Token.Directive : tks) =
-  let (dirTks, rest) = collectDirective tks
-   in parseDirective dirTks : parse rest
-parse (Token.Struct : Token.Id _ : Token.DelimOpen Delimiter.Br : tks) =
-  let (structTks, rest) = collectStruct tks
-   in parseStruct structTks : parse rest
-parse (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.Pr : Token.DelimClose Delimiter.Pr : Token.DelimOpen Delimiter.Br : tks) =
-  let (funcDecTks, rest) = collectFuncDec tks
-   in parseFuncDec ty name funcDecTks : parse rest
-parse (Token.NL : tks) = parse tks
-parse (tk : _) = error ("Unexpected token " ++ show tk)
+parse tokens = parseDeclarations (staticParse tokens)
+
+staticParse :: [Token] -> [Token]
+staticParse [] = []
+staticParse [tk] = [tk]
+staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
+staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral len : Token.DelimClose Delimiter.SqBr : rest) =
+  staticParse (Token.Type (Type.Array ty (read len)) : name : rest)
+staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
+  staticParse (Token.Type (Type.ArrayNoHint ty) : name : rest)
+staticParse (Token.Struct : Token.Id name : rest) = staticParse (Token.Type (Type.Struct (Just name)) : rest)
+staticParse (Token.Struct : rest) = staticParse (Token.Type (Type.Struct Nothing) : rest)
+staticParse (tk : rest) = tk : staticParse rest
+
+parseDeclarations :: [Token] -> [Declaration]
+parseDeclarations [] = []
+parseDeclarations [Eof] = []
+parseDeclarations (Token.Directive : rest) =
+  let (tokens, rest') = collectDirective rest
+   in parseDirective tokens : parseDeclarations rest'
+-- TODO struct name
+parseDeclarations (Token.Type (Type.Struct _) : Token.DelimOpen Delimiter.Br : rest) =
+  let (tokens, rest') = collectStruct rest
+   in parseStruct tokens : parseDeclarations rest'
+parseDeclarations (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.Pr : rest) =
+  case collectParameters rest of
+    (params, Token.Semicolon : rest') -> parseFuncDef ty name params : parseDeclarations rest'
+    (params, Token.DelimOpen Delimiter.Br : rest') ->
+      let (body, rest'') = collectFuncBody rest'
+       in parseFuncDec ty name params body : parseDeclarations rest''
+    (_, rest') -> Declaration.InvalidDeclaration "Expected semicolon" : parseDeclarations rest'
+parseDeclarations (Token.NL : rest) = parseDeclarations rest
+parseDeclarations (tk : _) = [Declaration.InvalidDeclaration ("Unexpected token " ++ show tk)]
 
 collectUntil :: Token -> [Token] -> ([Token], [Token])
 collectUntil _ [] = ([], [])
@@ -63,16 +83,15 @@ collectStatement = collectUntil Token.Semicolon
 
 parseStatement :: [Token] -> Statement
 parseStatement [] = Statement.Empty
-parseStatement (Token.Struct : Token.Id name : tks) = parseStatement (Token.Type (Type.Struct name) : tks)
-parseStatement [Token.Type ty, Token.Id name] = Statement.Var ty name Nothing
-parseStatement (Token.Type ty : Token.Id name : Token.Op Op.Assign : exprTks) = Statement.Var ty name (Just (parseExpr exprTks))
-parseStatement [Token.Type ty, Token.Id name, Token.DelimOpen Delimiter.SqBr, Token.NumLiteral len, Token.DelimClose Delimiter.SqBr] =
-  Statement.Var (Type.Array ty (read len)) name Nothing
-parseStatement (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral len : Token.DelimClose Delimiter.SqBr : Token.Op Op.Assign : exprTks) =
-  Statement.Var (Type.Array ty (read len)) name (Just (parseExpr exprTks))
+parseStatement (Token.Type ty : Token.Id name : tks) = parseVarStatement ty name tks
 parseStatement [Token.Return] = Statement.Return Nothing
 parseStatement (Token.Return : exprTks) = Statement.Return (Just (parseExpr exprTks))
 parseStatement tokens = Statement.Expr (parseExpr tokens)
+
+parseVarStatement :: Type -> Id -> [Token] -> Statement
+parseVarStatement ty name [] = Statement.Var ty name Nothing
+parseVarStatement ty name (Token.Op Op.Assign : tokens) = Statement.Var ty name (Just (parseExpr tokens))
+parseVarStatement _ _ tokens = Statement.InvalidStatement ("Invalid assignment : " ++ show tokens)
 
 parseExprList :: [Token] -> [Expr]
 parseExprList [] = []
@@ -80,19 +99,19 @@ parseExprList (Token.Op Op.Comma : rest) = parseExprList rest
 parseExprList tokens = let (expr, rest) = collectUntil (Token.Op Op.Comma) tokens in parseExpr expr : parseExprList rest
 
 parseExpr :: [Token] -> Expr
-parseExpr [] = error "Empty expression"
+parseExpr [] = Expr.InvalidExpr "Empty expression"
 parseExpr (Token.NumLiteral num : rest) = parseExprNext (Expr.NumLiteral num) rest
 parseExpr (Token.StrLiteral str : rest) = parseExprNext (Expr.StrLiteral str) rest
 parseExpr (Token.Id identifier : rest) = parseExprNext (Expr.Id identifier) rest
 parseExpr (Token.Op op : rest) | Op.isUnaryPre op = Expr.UnopPre op (parseExpr rest)
 parseExpr (Token.DelimOpen Delimiter.Br : rest) = Expr.ArrayDecl (parseExprList (collectArrayDecl rest))
-parseExpr tokens = error ("Invalid expression : " ++ show tokens)
+parseExpr tokens = Expr.InvalidExpr ("Invalid expression : " ++ show tokens)
 
 parseExprNext :: Expr -> [Token] -> Expr
 parseExprNext expr [] = expr
 parseExprNext expr [Token.Op op] | Op.isUnaryPost op = Expr.UnopPost op expr
 parseExprNext expr (Token.Op op : rest) | Op.isBinary op = Expr.Binop expr op (parseExpr rest)
-parseExprNext expr tokens = error ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
+parseExprNext expr tokens = Expr.InvalidExpr ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Br tokens in tokens'
@@ -103,11 +122,26 @@ collectDirective = collectUntil Token.NL
 parseDirective :: [Token] -> Declaration
 parseDirective _ = Declaration.Directive
 
-collectFuncDec :: [Token] -> ([Token], [Token])
-collectFuncDec = collectUntilDelimiter Delimiter.Br
+collectParameters :: [Token] -> ([(Type, Id)], [Token])
+collectParameters [] = ([], [])
+collectParameters tokens =
+  let (tokens', rest) = collectUntil (Token.DelimClose Delimiter.Pr) tokens
+   in (makeList tokens', rest)
+  where
+    makeList :: [Token] -> [(Type, Id)]
+    makeList [] = []
+    makeList (Token.Type ty : Token.Id name : Token.Op Op.Comma : rest) = (ty, name) : makeList rest
+    makeList (Token.Type ty : Token.Id name : _) = [(ty, name)]
+    makeList tokens'' = error ("Invalid parameters : " ++ show tokens'')
 
-parseFuncDec :: Type -> Identifier.Id -> [Token] -> Declaration
-parseFuncDec ty name body = Declaration.FuncDec ty name (parseStatementList body)
+parseFuncDef :: Type -> Id -> [(Type, Id)] -> Declaration
+parseFuncDef = Declaration.FuncDef
+
+parseFuncDec :: Type -> Id -> [(Type, Id)] -> [Token] -> Declaration
+parseFuncDec ty name params body = Declaration.FuncDec ty name params (parseStatementList body)
+
+collectFuncBody :: [Token] -> ([Token], [Token])
+collectFuncBody = collectUntilDelimiter Delimiter.Br
 
 collectStruct :: [Token] -> ([Token], [Token])
 collectStruct = collectUntilDelimiter Delimiter.Br
