@@ -1,4 +1,4 @@
-module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, precedence) where
 
 data Op
   = Not
@@ -100,31 +100,39 @@ ternary = [TernaryThen, TernaryElse]
 isTernary :: Op -> Bool
 isTernary op = op `elem` ternary
 
--- opPrecedence :: Op -> Int
--- opPrecedence op = case op of
---   Increment
-
--- opPrecedence :: Op -> Int
--- opPrecedence op = case op of
---   AddrOrBitAnd -> 0
---   Not -> 0
---   Index -> 1
---   Mod -> 1
---   MultOrDeref -> 2
---   Div -> 2
---   AddOrPlus -> 3
---   SubOrNeg -> 3
---   Equal -> 4
---   NotEqual -> 4
---   Gt -> 4
---   Gte -> 4
---   Lt -> 4
---   Lte -> 4
---   BoolAnd -> 5
---   BoolOr -> 6
---   Assign -> 7
---   AddAssign -> 7
---   SubAssign -> 7
---   MultAssign -> 7
---   DivAssign -> 7
---   ModAssign -> 7
+precedence :: Op -> Int
+precedence op = case op of
+  Subscript -> 0
+  Member -> 0
+  MemberPtr -> 0
+  MultOrIndir -> 1
+  Div -> 1
+  Mod -> 1
+  AddOrPlus -> 2
+  SubOrNeg -> 2
+  LShift -> 3
+  RShift -> 3
+  Lt -> 4
+  Lte -> 4
+  Gt -> 4
+  Gte -> 4
+  Equal -> 5
+  NotEqual -> 5
+  BitAndOrAddr -> 6
+  BitXor -> 7
+  BitOr -> 8
+  BoolAnd -> 9
+  BoolOr -> 10
+  Assign -> 11
+  AddAssign -> 11
+  SubAssign -> 11
+  MultAssign -> 11
+  DivAssign -> 11
+  ModAssign -> 11
+  LShiftAssign -> 11
+  RShiftAssign -> 11
+  BitAndAssign -> 11
+  BitXorAssign -> 11
+  BitOrAssign -> 11
+  Comma -> 12
+  _ -> 99

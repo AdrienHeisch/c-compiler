@@ -1,11 +1,6 @@
-struct Person {
-    int age;
-}
-
 int main() {
-    struct Person persons[1];
-    int p = persons[0];
-    int a = p.age;
-    int *b = &persons[3].age;
+    int a = 5 * 2 + 3;
+    int b = 5 + 2 * 3;
+    int a = 5 * (2 + 3);
     return 0;
 }

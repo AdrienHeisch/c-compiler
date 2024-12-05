@@ -3,7 +3,7 @@ module Parser (parse) where
 import Declaration (Declaration (..))
 import Expr (Expr (..))
 import Identifier (Id)
-import Op qualified
+import Op (Op (..), isBinary, isUnaryPost, isUnaryPre, precedence)
 import Statement (Statement (..))
 import Token (Token (..))
 import Token as Delimiter (Delimiter (..))
@@ -110,8 +110,8 @@ parseExpr tokens = Expr.Invalid ("Invalid expression : " ++ show tokens)
 parseExprNext :: Expr -> [Token] -> Expr
 parseExprNext expr [] = expr
 parseExprNext expr [Token.Op op] | Op.isUnaryPost op = Expr.UnopPost op expr
-parseExprNext expr (Token.Op op : rest) | Op.isBinary op = Expr.Binop expr op (parseExpr rest)
-parseExprNext expr (Token.DelimOpen Delimiter.SqBr : rest) = Expr.Binop expr Op.Subscript (parseExpr (collectIndex rest))
+parseExprNext expr (Token.Op op : rest) | Op.isBinary op = makeBinop expr op (parseExpr rest)
+parseExprNext expr (Token.DelimOpen Delimiter.SqBr : rest) = makeBinop expr Op.Subscript (parseExpr (collectIndex rest))
 parseExprNext expr (Token.DelimOpen Delimiter.Pr : rest) = Expr.Call expr (parseExprList (collectArguments rest))
 parseExprNext expr tokens = Expr.Invalid ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
 
@@ -126,6 +126,12 @@ collectIndex tokens = let (tokens', _) = collectUntilDelimiter Delimiter.SqBr to
 
 collectDirective :: [Token] -> ([Token], [Token])
 collectDirective = collectUntil Token.NL
+
+makeBinop :: Expr -> Op -> Expr -> Expr
+makeBinop left op Expr.Binop {left = r_left, op = r_op, right = r_right}
+  | precedence op <= precedence r_op =
+      Expr.Binop (makeBinop left op r_left) r_op r_right
+makeBinop left op right = Expr.Binop left op right
 
 parseDirective :: [Token] -> Declaration
 parseDirective _ = Declaration.Directive
