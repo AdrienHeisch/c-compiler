@@ -84,7 +84,11 @@ parseStatement [] = (Statement.Empty, [])
 parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
   let (condition, rest') = collectUntilDelimiter Delimiter.Pr rest
    in let (then_, rest'') = parseStatement rest'
-       in (Statement.If (parseExpr condition) then_ Nothing, rest'')
+       in case rest'' of
+        (Token.Else : rest''') ->
+          let (else_, rest'''') = parseStatement rest'''
+           in (Statement.If (parseExpr condition) then_ (Just else_), rest'''')
+        _ -> (Statement.If (parseExpr condition) then_ Nothing, rest'')
 parseStatement (Token.DelimOpen Delimiter.Br : rest) =
   let (tokens, rest') = collectUntilDelimiter Delimiter.Br rest
    in (Statement.Block (parseStatementList tokens), rest')
