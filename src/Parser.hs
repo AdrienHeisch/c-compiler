@@ -1,5 +1,6 @@
 module Parser (parse) where
 
+import Debug.Trace (trace)
 import Declaration (Declaration (..))
 import Expr (Expr (..))
 import Identifier (Id)
@@ -68,30 +69,36 @@ collectUntilDelimiter del tokens = collect tokens 0
       let (tokens', rest') = collect rest depth
        in (tk : tokens', rest')
 
-parseList :: Token -> ([Token] -> ([Token], [Token])) -> ([Token] -> a) -> [Token] -> [a]
-parseList _ _ _ [] = []
-parseList end collector parser (tk : rest) | tk == end = parseList end collector parser rest
-parseList end collector parser tokens =
-  let (statement, rest) = collector tokens
-   in parser statement : parseList end collector parser rest
+parseList :: Token -> ([Token] -> (a, [Token])) -> [Token] -> [a]
+parseList _ _ [] = []
+parseList end parser (tk : rest) | tk == end = parseList end parser rest
+parseList end parser tokens =
+  let (statement, rest) = parser tokens
+   in statement : parseList end parser rest
 
 parseStatementList :: [Token] -> [Statement]
-parseStatementList = parseList Token.NL collectStatement parseStatement
+parseStatementList = parseList Token.NL parseStatement
 
-collectStatement :: [Token] -> ([Token], [Token])
-collectStatement (Token.DelimOpen Delimiter.Br : rest) = 
-  let (tokens, rest') = collectUntil (Token.DelimClose Delimiter.Br) rest
-   in (Token.DelimOpen Delimiter.Br : tokens, rest')
-collectStatement tokens = collectUntil Token.Semicolon tokens
+parseStatement :: [Token] -> (Statement, [Token])
+parseStatement [] = (Statement.Empty, [])
+parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
+  let (condition, rest') = collectUntilDelimiter Delimiter.Pr rest
+   in let (then_, rest'') = parseStatement rest'
+       in (Statement.If (parseExpr condition) then_ Nothing, rest'')
+parseStatement (Token.DelimOpen Delimiter.Br : rest) =
+  let (tokens, rest') = collectUntilDelimiter Delimiter.Br rest
+   in (Statement.Block (parseStatementList tokens), rest')
+parseStatement (Token.Return : rest) =
+  case collectUntil Token.Semicolon rest of
+    ([], rest') -> (Statement.Return Nothing, rest')
+    (tokens, rest') -> (Statement.Return (Just (parseExpr tokens)), rest')
+parseStatement (Token.Type ty : Token.Id name : tokens) = simpleStatement (parseVarStatement ty name) tokens
+parseStatement tokens = simpleStatement (Statement.Expr . parseExpr) tokens
 
-parseStatement :: [Token] -> Statement
-parseStatement [] = Statement.Empty
--- parseStatement (Token.If : rest) = Statement.If (parseExpr exprTks)
-parseStatement (Token.DelimOpen Delimiter.Br : rest) = Statement.Block (parseStatementList rest)
-parseStatement (Token.Type ty : Token.Id name : tks) = parseVarStatement ty name tks
-parseStatement [Token.Return] = Statement.Return Nothing
-parseStatement (Token.Return : exprTks) = Statement.Return (Just (parseExpr exprTks))
-parseStatement tokens = Statement.Expr (parseExpr tokens)
+simpleStatement :: ([Token] -> Statement) -> [Token] -> (Statement, [Token])
+simpleStatement parser tokens =
+  let (tokens', rest') = collectUntil Token.Semicolon tokens
+   in (parser tokens', rest')
 
 parseVarStatement :: Type -> Id -> [Token] -> Statement
 parseVarStatement ty name [] = Statement.Var ty name Nothing

@@ -9,11 +9,11 @@ data Statement
   | Expr Expr
   | Var Type Id (Maybe Expr)
   | Block [Statement]
-  | If {cond :: Expr, then_ :: [Statement], else_ :: Maybe [Statement]}
+  | If {cond :: Expr, then_ :: Statement, else_ :: Maybe Statement}
   | Switch -- TODO
   | For -- TODO
-  | While {cond :: Expr, loop :: [Statement]}
-  | DoWhile {cond :: Expr, loop :: [Statement]}
+  | While {cond :: Expr, loop :: Statement}
+  | DoWhile {cond :: Expr, loop :: Statement}
   | Break
   | Continue
   | Return (Maybe Expr)
