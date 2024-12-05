@@ -68,15 +68,15 @@ collectUntilDelimiter del tokens = collect tokens 0
       let (tokens', rest') = collect rest depth
        in (tk : tokens', rest')
 
-parseList :: Token -> ([Token] -> a) -> [Token] -> [a]
-parseList _ _ [] = []
-parseList end parser (tk : rest) | tk == end = parseList end parser rest
-parseList end parser tokens =
-  let (statement, rest) = collectStatement tokens
-   in parser statement : parseList end parser rest
+parseList :: Token -> ([Token] -> ([Token], [Token])) -> ([Token] -> a) -> [Token] -> [a]
+parseList _ _ _ [] = []
+parseList end collector parser (tk : rest) | tk == end = parseList end collector parser rest
+parseList end collector parser tokens =
+  let (statement, rest) = collector tokens
+   in parser statement : parseList end collector parser rest
 
 parseStatementList :: [Token] -> [Statement]
-parseStatementList = parseList Token.NL parseStatement
+parseStatementList = parseList Token.NL collectStatement parseStatement
 
 collectStatement :: [Token] -> ([Token], [Token])
 collectStatement = collectUntil Token.Semicolon
@@ -111,6 +111,7 @@ parseExprNext :: Expr -> [Token] -> Expr
 parseExprNext expr [] = expr
 parseExprNext expr [Token.Op op] | Op.isUnaryPost op = Expr.UnopPost op expr
 parseExprNext expr (Token.Op op : rest) | Op.isBinary op = Expr.Binop expr op (parseExpr rest)
+parseExprNext expr (Token.DelimOpen Delimiter.SqBr : rest) = Expr.Binop expr Op.Subscript (parseExpr (collectIndex rest))
 parseExprNext expr (Token.DelimOpen Delimiter.Pr : rest) = Expr.Call expr (parseExprList (collectArguments rest))
 parseExprNext expr tokens = Expr.Invalid ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
 
@@ -119,6 +120,9 @@ collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Br 
 
 collectArguments :: [Token] -> [Token]
 collectArguments tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Pr tokens in tokens'
+
+collectIndex :: [Token] -> [Token]
+collectIndex tokens = let (tokens', _) = collectUntilDelimiter Delimiter.SqBr tokens in tokens'
 
 collectDirective :: [Token] -> ([Token], [Token])
 collectDirective = collectUntil Token.NL
@@ -151,4 +155,4 @@ collectStruct :: [Token] -> ([Token], [Token])
 collectStruct = collectUntilDelimiter Delimiter.Br
 
 parseStruct :: [Token] -> Declaration
-parseStruct _ = Declaration.Type
+parseStruct _ = Declaration.Invalid "Structs not implemented"

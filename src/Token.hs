@@ -2,11 +2,11 @@ module Token (Token (..), Delimiter (..), make) where
 
 import CharClasses qualified as CC
 import Data.Char (isDigit)
+import Identifier qualified
 import Op (Op)
 import Op qualified (Op (..))
 import Type (Type)
 import Type qualified (Type (..))
-import Identifier qualified
 
 data Token
   = Type Type
@@ -133,8 +133,8 @@ make str = case str of
   "<<=" -> Op Op.LShiftAssign
   ">>" -> Op Op.RShift
   ">>=" -> Op Op.RShiftAssign
-  "->" -> Op Op.Deref
-  "." -> Op Op.StructRef
+  "->" -> Op Op.Member
+  "." -> Op Op.MemberPtr
   "=" -> Op Op.Assign
   "," -> Op Op.Comma
   "?" -> Op Op.TernaryThen

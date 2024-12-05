@@ -34,23 +34,23 @@ data Op
   | Increment
   | Decrement
   | Assign
-  | Deref
-  | StructRef
+  | Member
+  | MemberPtr
   | Comma
   | TernaryThen
   | TernaryElse
-  | Index
+  | Subscript
   | Sizeof
   deriving (Show, Eq)
 
 unaryPre :: [Op]
-unaryPre = [Not, AddOrPlus, MultOrIndir, SubOrNeg, BitNot, Increment, Decrement, Sizeof]
+unaryPre = [Not, AddOrPlus, MultOrIndir, SubOrNeg, BitNot, BitAndOrAddr, Increment, Decrement, Sizeof]
 
 isUnaryPre :: Op -> Bool
 isUnaryPre op = op `elem` unaryPre
 
 unaryPost :: [Op]
-unaryPost = [Index, Increment, Decrement]
+unaryPost = [Subscript, Increment, Decrement]
 
 isUnaryPost :: Op -> Bool
 isUnaryPost op = op `elem` unaryPost
@@ -86,8 +86,8 @@ binary =
     RShift,
     RShiftAssign,
     Assign,
-    Deref,
-    StructRef,
+    Member,
+    MemberPtr,
     Comma
   ]
 
@@ -99,6 +99,10 @@ ternary = [TernaryThen, TernaryElse]
 
 isTernary :: Op -> Bool
 isTernary op = op `elem` ternary
+
+-- opPrecedence :: Op -> Int
+-- opPrecedence op = case op of
+--   Increment
 
 -- opPrecedence :: Op -> Int
 -- opPrecedence op = case op of

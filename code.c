@@ -1,10 +1,11 @@
-int add(int a, int b) {
-    return a + b;
+struct Person {
+    int age;
 }
 
 int main() {
-    int a = 3;
-    int b = 7;
-    int c = add(a, b);
+    struct Person persons[1];
+    int p = persons[0];
+    int a = p.age;
+    int *b = &persons[3].age;
     return 0;
 }

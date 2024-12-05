@@ -16,7 +16,7 @@ lex text = reduceTokens (lexFrom text 0)
 reduceTokens :: [Token] -> [Token]
 reduceTokens [] = []
 reduceTokens (Token.NL : Token.NL : rest) = reduceTokens (Token.NL : rest)
-reduceTokens (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.StructRef : Token.Id (Id str') : Token.Op Op.Gt : rest) =
+reduceTokens (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.MemberPtr : Token.Id (Id str') : Token.Op Op.Gt : rest) =
   reduceTokens (Token.ImplInclude (str ++ "." ++ str') : rest)
 reduceTokens (tk : rest) = tk : reduceTokens rest
 
