@@ -1,10 +1,16 @@
 int main() {
-    int a = 5;
+    int a = 1;
 
-    for (int a = 0; a < 10; a++) {
-        int b = 3;
-        int c = 120;
-    } 
+    switch (a) {
+        case 0:
+            a = 1;
+            break;
+        case 1:
+            a = 0;
+            break;
+        //default:
+            return 1;
+    }
 
     return 0;
 }

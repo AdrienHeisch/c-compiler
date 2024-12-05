@@ -1,5 +1,6 @@
 module Parser (parse) where
 
+import Constant (Constant (..), IntRepr (IntRepr), StrRepr (StrRepr))
 import Declaration (Declaration (..))
 import Expr (Expr (..))
 import Identifier (Id)
@@ -7,7 +8,8 @@ import Op (Op (..), isBinary, isUnaryPost, isUnaryPre, precedence)
 import Statement (Statement (..))
 import Token (Token (..))
 import Token as Delimiter (Delimiter (..))
-import Type (Type (..))
+import Type (Type)
+import Type qualified (Type (..))
 import Utils (listToMaybeList)
 
 parse :: [Token] -> [Declaration]
@@ -17,8 +19,9 @@ staticParse :: [Token] -> [Token]
 staticParse [] = []
 staticParse [tk] = [tk]
 staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
-staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral len : Token.DelimClose Delimiter.SqBr : rest) =
-  staticParse (Token.Type (Type.Array ty (read len)) : name : rest)
+staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral (Constant Type.Int (IntRepr len)) : Token.DelimClose Delimiter.SqBr : rest) =
+  -- TODO any integer type as length
+  staticParse (Token.Type (Type.Array ty len) : name : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
   staticParse (Token.Type (Type.ArrayNoHint ty) : name : rest)
 staticParse (Token.Struct : Token.Id name : rest) = staticParse (Token.Type (Type.Struct (Just name)) : rest)
@@ -81,6 +84,7 @@ parseStatementList = parseList Token.NL parseStatement
 
 parseStatement :: [Token] -> (Statement, [Token])
 parseStatement [] = (Statement.Empty, [])
+parseStatement (Token.Semicolon : rest) = (Statement.Empty, rest)
 parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
   let (cond, rest') = collectUntilDelimiter Delimiter.Pr rest
    in let (then_, rest'') = parseStatement rest'
@@ -89,6 +93,10 @@ parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
               let (else_, rest'''') = parseStatement rest'''
                in (Statement.If (parseExpr cond) then_ (Just else_), rest'''')
             _ -> (Statement.If (parseExpr cond) then_ Nothing, rest'')
+parseStatement (Token.Switch : Token.DelimOpen Delimiter.Pr : rest) =
+  let (eval, rest') = collectUntilDelimiter Delimiter.Pr rest
+   in let (body, rest'') = parseSwitch rest'
+       in (Statement.Switch (parseExpr eval) body, rest'')
 parseStatement (Token.While : Token.DelimOpen Delimiter.Pr : rest) =
   let (cond, rest') = collectUntilDelimiter Delimiter.Pr rest
    in let (body, rest'') = parseStatement rest'
@@ -108,8 +116,8 @@ parseStatement (Token.For : Token.DelimOpen Delimiter.Pr : rest) =
        in let (incr, rest''') = collectUntilDelimiter Delimiter.Pr rest''
            in let (body, rest'''') = parseStatement rest'''
                in case decl of
-                (Token.Type ty : Token.Id name : assign) -> (Statement.ForVar (parseVarStatement ty name assign) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
-                _ -> (Statement.For (parseExpr <$> listToMaybeList decl) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
+                    (Token.Type ty : Token.Id name : assign) -> (Statement.ForVar (parseVarStatement ty name assign) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
+                    _ -> (Statement.For (parseExpr <$> listToMaybeList decl) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
 parseStatement (Token.DelimOpen Delimiter.Br : rest) =
   let (tokens, rest') = collectUntilDelimiter Delimiter.Br rest
    in (Statement.Block (parseStatementList tokens), rest')
@@ -117,8 +125,13 @@ parseStatement (Token.Return : rest) =
   case collectUntil Token.Semicolon rest of
     ([], rest') -> (Statement.Return Nothing, rest')
     (tokens, rest') -> (Statement.Return (Just (parseExpr tokens)), rest')
+parseStatement (Token.Break : Token.Semicolon : rest) = (Statement.Break, rest)
+parseStatement (Token.Continue : Token.Semicolon : rest) = (Statement.Continue, rest)
 parseStatement (Token.Type ty : Token.Id name : tokens) = simpleStatement (parseVarStatement ty name) tokens
 parseStatement tokens = simpleStatement (Statement.Expr . parseExpr) tokens
+
+parseSwitch :: [Token] -> (Statement, [Token])
+parseSwitch = parseStatement
 
 simpleStatement :: ([Token] -> Statement) -> [Token] -> (Statement, [Token])
 simpleStatement parser tokens =
@@ -137,8 +150,8 @@ parseExprList tokens = let (expr, rest) = collectUntil (Token.Op Op.Comma) token
 
 parseExpr :: [Token] -> Expr
 parseExpr [] = Expr.Invalid "Empty expression"
-parseExpr (Token.NumLiteral num : rest) = parseExprNext (Expr.NumLiteral num) rest
-parseExpr (Token.StrLiteral str : rest) = parseExprNext (Expr.StrLiteral str) rest
+parseExpr (Token.NumLiteral (Constant Type.Int (IntRepr num)) : rest) = parseExprNext (Expr.NumLiteral num) rest
+parseExpr (Token.StrLiteral (Constant (Type.Array Type.Char _) (StrRepr str)) : rest) = parseExprNext (Expr.StrLiteral str) rest
 parseExpr (Token.Id identifier : rest) = parseExprNext (Expr.Id identifier) rest
 parseExpr (Token.Op op : rest) | Op.isUnaryPre op = Expr.UnopPre op (parseExpr rest)
 parseExpr (Token.DelimOpen Delimiter.Br : rest) = Expr.ArrayDecl (parseExprList (collectArrayDecl rest))

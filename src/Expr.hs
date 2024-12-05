@@ -5,7 +5,7 @@ import Op (Op)
 
 data Expr
   = Id Id
-  | NumLiteral String
+  | NumLiteral Int
   | StrLiteral String
   | ArrayDecl [Expr]
   | UnopPre {op :: Op, expr :: Expr}

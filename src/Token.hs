@@ -7,19 +7,21 @@ import Op (Op)
 import Op qualified (Op (..))
 import Type (Type)
 import Type qualified (Type (..))
+import Constant (Constant(..), IntRepr(IntRepr), StrRepr(StrRepr))
 
 data Token
   = Type Type
   | Op Op
   | Id Identifier.Id
-  | NumLiteral String
-  | StrLiteral String
+  | NumLiteral (Constant IntRepr) -- TODO float
+  | StrLiteral (Constant StrRepr)
   | ImplInclude String
   | Const
   | If
   | Else
   | Switch
   | Case
+  | Default
   | Do
   | While
   | For
@@ -77,6 +79,7 @@ make str = case str of
   "else" -> Else
   "switch" -> Switch
   "case" -> Case
+  "default" -> Default
   "do" -> Do
   "while" -> While
   "for" -> For
@@ -88,7 +91,6 @@ make str = case str of
   "enum" -> Enum
   "union" -> Union
   "typedef" -> Typedef
-  "default" -> keywordUnimplErr str
   "extern" -> keywordUnimplErr str
   "register" -> keywordUnimplErr str
   "restrict" -> keywordUnimplErr str
@@ -148,8 +150,8 @@ make str = case str of
   "#" -> Directive
   "false" -> keywordUnimplErr str
   "true" -> keywordUnimplErr str
-  _ | isStringLiteral str -> StrLiteral (tail (take (length str - 1) str))
-  _ | isNumberLiteral str -> NumLiteral str
+  _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (StrRepr $ tail (take (length str - 1) str))
+  _ | isNumberLiteral str -> NumLiteral $ Constant Type.Int (IntRepr $ read str)
   _ | isIdentifier str -> Id (Identifier.Id str)
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil

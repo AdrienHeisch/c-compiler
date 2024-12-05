@@ -10,15 +10,16 @@ data Statement
   | Var Type Id (Maybe Expr)
   | Block [Statement]
   | If {cond :: Expr, then_ :: Statement, else_ :: Maybe Statement}
-  | Switch -- TODO
+  | Switch {eval :: Expr, body :: Statement}
   | While {cond :: Expr, body :: Statement}
   | DoWhile {body :: Statement, cond :: Expr}
-  | For {fdecl :: Maybe Expr, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
-  | ForVar {decl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
+  | For {finit :: Maybe Expr, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
+  | ForVar {fdecl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
   | Break
   | Continue
   | Return (Maybe Expr)
   | Goto -- TODO
+  | Case 
   | Label -- TODO
   | Invalid String
   deriving (Show)
