@@ -68,10 +68,12 @@ executable compiler
         Token,
         Cursor,
         CharClasses,
-        Structures,
         Parser,
         Type,
         Identifier,
+        Declaration,
+        Statement,
+        Expr
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

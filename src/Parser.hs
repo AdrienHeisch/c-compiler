@@ -1,10 +1,10 @@
 module Parser (parse) where
 
+import Declaration (Declaration (..))
+import Expr (Expr (..))
 import Identifier (Id)
 import Op qualified
-import Structures as Declaration (Declaration (..))
-import Structures as Expr (Expr (..))
-import Structures as Statement (Statement (..))
+import Statement (Statement (..))
 import Token (Token (..))
 import Token as Delimiter (Delimiter (..))
 import Type (Type (..))
@@ -14,8 +14,8 @@ parse tokens = parseDeclarations (staticParse tokens)
 
 staticParse :: [Token] -> [Token]
 staticParse [] = []
-staticParse [tk] = [tk]
-staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
+staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) =
+  staticParse (Token.Type (Type.Pointer ty) : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral len : Token.DelimClose Delimiter.SqBr : rest) =
   staticParse (Token.Type (Type.Array ty (read len)) : name : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
@@ -40,9 +40,9 @@ parseDeclarations (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.Pr 
     (params, Token.DelimOpen Delimiter.Br : rest') ->
       let (body, rest'') = collectFuncBody rest'
        in parseFuncDec ty name params body : parseDeclarations rest''
-    (_, rest') -> Declaration.InvalidDeclaration "Expected semicolon" : parseDeclarations rest'
+    (_, rest') -> Declaration.Invalid "Expected semicolon" : parseDeclarations rest'
 parseDeclarations (Token.NL : rest) = parseDeclarations rest
-parseDeclarations (tk : _) = [Declaration.InvalidDeclaration ("Unexpected token " ++ show tk)]
+parseDeclarations (tk : _) = [Declaration.Invalid ("Unexpected token " ++ show tk)]
 
 collectUntil :: Token -> [Token] -> ([Token], [Token])
 collectUntil _ [] = ([], [])
@@ -91,7 +91,7 @@ parseStatement tokens = Statement.Expr (parseExpr tokens)
 parseVarStatement :: Type -> Id -> [Token] -> Statement
 parseVarStatement ty name [] = Statement.Var ty name Nothing
 parseVarStatement ty name (Token.Op Op.Assign : tokens) = Statement.Var ty name (Just (parseExpr tokens))
-parseVarStatement _ _ tokens = Statement.InvalidStatement ("Invalid assignment : " ++ show tokens)
+parseVarStatement _ _ tokens = Statement.Invalid ("Invalid assignment : " ++ show tokens)
 
 parseExprList :: [Token] -> [Expr]
 parseExprList [] = []
@@ -99,19 +99,19 @@ parseExprList (Token.Op Op.Comma : rest) = parseExprList rest
 parseExprList tokens = let (expr, rest) = collectUntil (Token.Op Op.Comma) tokens in parseExpr expr : parseExprList rest
 
 parseExpr :: [Token] -> Expr
-parseExpr [] = Expr.InvalidExpr "Empty expression"
+parseExpr [] = Expr.Invalid "Empty expression"
 parseExpr (Token.NumLiteral num : rest) = parseExprNext (Expr.NumLiteral num) rest
 parseExpr (Token.StrLiteral str : rest) = parseExprNext (Expr.StrLiteral str) rest
 parseExpr (Token.Id identifier : rest) = parseExprNext (Expr.Id identifier) rest
 parseExpr (Token.Op op : rest) | Op.isUnaryPre op = Expr.UnopPre op (parseExpr rest)
 parseExpr (Token.DelimOpen Delimiter.Br : rest) = Expr.ArrayDecl (parseExprList (collectArrayDecl rest))
-parseExpr tokens = Expr.InvalidExpr ("Invalid expression : " ++ show tokens)
+parseExpr tokens = Expr.Invalid ("Invalid expression : " ++ show tokens)
 
 parseExprNext :: Expr -> [Token] -> Expr
 parseExprNext expr [] = expr
 parseExprNext expr [Token.Op op] | Op.isUnaryPost op = Expr.UnopPost op expr
 parseExprNext expr (Token.Op op : rest) | Op.isBinary op = Expr.Binop expr op (parseExpr rest)
-parseExprNext expr tokens = Expr.InvalidExpr ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
+parseExprNext expr tokens = Expr.Invalid ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Br tokens in tokens'
@@ -137,11 +137,11 @@ collectParameters tokens =
 parseFuncDef :: Type -> Id -> [(Type, Id)] -> Declaration
 parseFuncDef = Declaration.FuncDef
 
-parseFuncDec :: Type -> Id -> [(Type, Id)] -> [Token] -> Declaration
-parseFuncDec ty name params body = Declaration.FuncDec ty name params (parseStatementList body)
-
 collectFuncBody :: [Token] -> ([Token], [Token])
 collectFuncBody = collectUntilDelimiter Delimiter.Br
+
+parseFuncDec :: Type -> Id -> [(Type, Id)] -> [Token] -> Declaration
+parseFuncDec ty name params body = Declaration.FuncDec ty name params (parseStatementList body)
 
 collectStruct :: [Token] -> ([Token], [Token])
 collectStruct = collectUntilDelimiter Delimiter.Br

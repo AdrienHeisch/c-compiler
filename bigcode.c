@@ -15,14 +15,14 @@ struct Student {
     int id;
     char name[50];
     float grade;
-};
+};*/
 
 // Function prototypes
 void printStudent(struct Student *s);
 void sortStudents(struct Student *students, int count);
-void writeToFile(struct Student *students, int count, const char *filename);
-void readFromFile(struct Student *students, int *count, const char *filename);
-*/
+void writeToFile(struct Student *students, int count, char *filename);
+void readFromFile(struct Student *students, int *count, char *filename);
+
 int main() {
     // Variable declarations
     struct Student students[100];
@@ -85,7 +85,7 @@ void sortStudents(struct Student *students, int count) {
 }
 
 // Function to write student data to a file
-void writeToFile(struct Student *students, int count, const char *filename) {
+void writeToFile(struct Student *students, int count, char *filename) {
     FILE *file = fopen(filename, "w");
     if (file == NULL) {
         perror("Error opening file");
@@ -98,7 +98,7 @@ void writeToFile(struct Student *students, int count, const char *filename) {
 }
 
 // Function to read student data from a file
-void readFromFile(struct Student *students, int *count, const char *filename) {
+void readFromFile(struct Student *students, int *count, char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         perror("Error opening file");
