@@ -9,7 +9,7 @@ data Statement
   | Expr Expr
   | Var Type Id (Maybe Expr)
   | Block [Statement]
-  | If {cond :: Expr, then_ :: [Statement], else_ :: Maybe Expr}
+  | If {cond :: Expr, then_ :: [Statement], else_ :: Maybe [Statement]}
   | Switch -- TODO
   | For -- TODO
   | While {cond :: Expr, loop :: [Statement]}

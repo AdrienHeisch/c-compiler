@@ -79,10 +79,15 @@ parseStatementList :: [Token] -> [Statement]
 parseStatementList = parseList Token.NL collectStatement parseStatement
 
 collectStatement :: [Token] -> ([Token], [Token])
-collectStatement = collectUntil Token.Semicolon
+collectStatement (Token.DelimOpen Delimiter.Br : rest) = 
+  let (tokens, rest') = collectUntil (Token.DelimClose Delimiter.Br) rest
+   in (Token.DelimOpen Delimiter.Br : tokens, rest')
+collectStatement tokens = collectUntil Token.Semicolon tokens
 
 parseStatement :: [Token] -> Statement
 parseStatement [] = Statement.Empty
+-- parseStatement (Token.If : rest) = Statement.If (parseExpr exprTks)
+parseStatement (Token.DelimOpen Delimiter.Br : rest) = Statement.Block (parseStatementList rest)
 parseStatement (Token.Type ty : Token.Id name : tks) = parseVarStatement ty name tks
 parseStatement [Token.Return] = Statement.Return Nothing
 parseStatement (Token.Return : exprTks) = Statement.Return (Just (parseExpr exprTks))
