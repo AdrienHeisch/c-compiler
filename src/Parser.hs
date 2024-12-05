@@ -14,8 +14,8 @@ parse tokens = parseDeclarations (staticParse tokens)
 
 staticParse :: [Token] -> [Token]
 staticParse [] = []
-staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) =
-  staticParse (Token.Type (Type.Pointer ty) : rest)
+staticParse [tk] = [tk]
+staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral len : Token.DelimClose Delimiter.SqBr : rest) =
   staticParse (Token.Type (Type.Array ty (read len)) : name : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
@@ -111,10 +111,14 @@ parseExprNext :: Expr -> [Token] -> Expr
 parseExprNext expr [] = expr
 parseExprNext expr [Token.Op op] | Op.isUnaryPost op = Expr.UnopPost op expr
 parseExprNext expr (Token.Op op : rest) | Op.isBinary op = Expr.Binop expr op (parseExpr rest)
+parseExprNext expr (Token.DelimOpen Delimiter.Pr : rest) = Expr.Call expr (parseExprList (collectArguments rest))
 parseExprNext expr tokens = Expr.Invalid ("Invalid follow expression : " ++ show expr ++ ", " ++ show tokens)
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Br tokens in tokens'
+
+collectArguments :: [Token] -> [Token]
+collectArguments tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Pr tokens in tokens'
 
 collectDirective :: [Token] -> ([Token], [Token])
 collectDirective = collectUntil Token.NL

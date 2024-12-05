@@ -12,6 +12,7 @@ data Expr
   | UnopPost {op :: Op, expr :: Expr}
   | Binop {left :: Expr, op :: Op, right :: Expr}
   | Ternary {ter_cond :: Expr, ter_then :: Expr, ter_else :: Expr}
+  | Call {expr :: Expr, args :: [Expr]}
   | Parentheses Expr
   | Invalid String
   deriving (Show)

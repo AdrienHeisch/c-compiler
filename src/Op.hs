@@ -36,7 +36,6 @@ data Op
   | Assign
   | Deref
   | StructRef
-  | Call
   | Comma
   | TernaryThen
   | TernaryElse
@@ -51,7 +50,7 @@ isUnaryPre :: Op -> Bool
 isUnaryPre op = op `elem` unaryPre
 
 unaryPost :: [Op]
-unaryPost = [Call, Index, Increment, Decrement]
+unaryPost = [Index, Increment, Decrement]
 
 isUnaryPost :: Op -> Bool
 isUnaryPost op = op `elem` unaryPost
@@ -89,7 +88,6 @@ binary =
     Assign,
     Deref,
     StructRef,
-    Call,
     Comma
   ]
 
