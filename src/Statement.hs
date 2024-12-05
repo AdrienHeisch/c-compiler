@@ -12,8 +12,8 @@ data Statement
   | If {cond :: Expr, then_ :: Statement, else_ :: Maybe Statement}
   | Switch -- TODO
   | For -- TODO
-  | While {cond :: Expr, loop :: Statement}
-  | DoWhile {cond :: Expr, loop :: Statement}
+  | While {cond :: Expr, body :: Statement}
+  | DoWhile {body :: Statement, cond :: Expr}
   | Break
   | Continue
   | Return (Maybe Expr)

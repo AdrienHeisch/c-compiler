@@ -89,6 +89,19 @@ parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
           let (else_, rest'''') = parseStatement rest'''
            in (Statement.If (parseExpr condition) then_ (Just else_), rest'''')
         _ -> (Statement.If (parseExpr condition) then_ Nothing, rest'')
+parseStatement (Token.While : Token.DelimOpen Delimiter.Pr : rest) =
+  let (condition, rest') = collectUntilDelimiter Delimiter.Pr rest
+   in let (body, rest'') = parseStatement rest'
+       in (Statement.While (parseExpr condition) body, rest'')
+parseStatement (Token.Do : rest) =
+  let (body, rest') = parseStatement rest
+   in case rest' of
+    (Token.While : Token.DelimOpen Delimiter.Pr : rest'') ->
+      let (condition, rest''') = collectUntilDelimiter Delimiter.Pr rest''
+       in case rest''' of
+        (Token.Semicolon: rest'''') -> (Statement.DoWhile body $ parseExpr condition, rest'''')
+        _ -> (Statement.Invalid "Expected semicolon", rest')
+    _ -> (Statement.Invalid "Expected while (", rest')
 parseStatement (Token.DelimOpen Delimiter.Br : rest) =
   let (tokens, rest') = collectUntilDelimiter Delimiter.Br rest
    in (Statement.Block (parseStatementList tokens), rest')
