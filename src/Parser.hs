@@ -17,7 +17,6 @@ parse tokens = parseDeclarations (staticParse tokens)
 
 staticParse :: [Token] -> [Token]
 staticParse [] = []
-staticParse [tk] = [tk]
 staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.NumLiteral (Constant Type.Int (IntRepr len)) : Token.DelimClose Delimiter.SqBr : rest) =
   -- TODO any integer type as length
@@ -95,7 +94,7 @@ parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
             _ -> (Statement.If (parseExpr cond) then_ Nothing, rest'')
 parseStatement (Token.Switch : Token.DelimOpen Delimiter.Pr : rest) =
   let (eval, rest') = collectUntilDelimiter Delimiter.Pr rest
-   in let (body, rest'') = parseSwitch rest'
+   in let (body, rest'') = parseStatement rest'
        in (Statement.Switch (parseExpr eval) body, rest'')
 parseStatement (Token.While : Token.DelimOpen Delimiter.Pr : rest) =
   let (cond, rest') = collectUntilDelimiter Delimiter.Pr rest
@@ -127,11 +126,9 @@ parseStatement (Token.Return : rest) =
     (tokens, rest') -> (Statement.Return (Just (parseExpr tokens)), rest')
 parseStatement (Token.Break : Token.Semicolon : rest) = (Statement.Break, rest)
 parseStatement (Token.Continue : Token.Semicolon : rest) = (Statement.Continue, rest)
+parseStatement (Token.Case : Token.NumLiteral constant@(Constant Type.Int _) : Token.Op Op.TernaryElse : rest) = (Statement.Case constant, rest) -- TODO any integer type for case
 parseStatement (Token.Type ty : Token.Id name : tokens) = simpleStatement (parseVarStatement ty name) tokens
 parseStatement tokens = simpleStatement (Statement.Expr . parseExpr) tokens
-
-parseSwitch :: [Token] -> (Statement, [Token])
-parseSwitch = parseStatement
 
 simpleStatement :: ([Token] -> Statement) -> [Token] -> (Statement, [Token])
 simpleStatement parser tokens =

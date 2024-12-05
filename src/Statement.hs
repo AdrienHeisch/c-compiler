@@ -3,6 +3,7 @@ module Statement (Statement (..)) where
 import Expr (Expr)
 import Identifier (Id)
 import Type (Type (..))
+import Constant (Constant, IntRepr)
 
 data Statement
   = Empty
@@ -18,8 +19,8 @@ data Statement
   | Break
   | Continue
   | Return (Maybe Expr)
+  | Case (Constant IntRepr)
   | Goto -- TODO
-  | Case 
   | Label -- TODO
   | Invalid String
   deriving (Show)

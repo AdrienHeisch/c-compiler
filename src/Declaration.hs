@@ -7,7 +7,7 @@ import Type (Type (..))
 data Declaration
   = Directive
   | FuncDef Type Id [(Type, Id)]
-  | FuncDec Type Id [(Type, Id)] [Statement] -- TODO parameters
+  | FuncDec Type Id [(Type, Id)] [Statement]
   | Global
   | Static
   | Type
