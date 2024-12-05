@@ -1,5 +1,10 @@
+struct Person {
+    char name[12];
+    unsigned int age;
+};
+
 int main() {
-    char a = '\xFF';
+    struct Person p;
 
     return 0;
 }

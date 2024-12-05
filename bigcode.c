@@ -8,14 +8,14 @@
 OH
 
 LOOK AT THIS COMMENT
-
+*/
 
 // Define a structure
 struct Student {
     int id;
     char name[50];
     float grade;
-};*/
+};
 
 // Function prototypes
 void printStudent(struct Student *s);

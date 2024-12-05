@@ -35,10 +35,12 @@ parseDeclarations [Eof] = []
 parseDeclarations (Token.Directive : rest) =
   let (tokens, rest') = collectDirective rest
    in parseDirective tokens : parseDeclarations rest'
--- TODO struct name
-parseDeclarations (Token.Type (Type.Struct _) : Token.DelimOpen Delimiter.Br : rest) =
-  let (tokens, rest') = collectStruct rest
-   in parseStruct tokens : parseDeclarations rest'
+parseDeclarations (Token.Type (Type.Struct name) : Token.DelimOpen Delimiter.Br : rest) =
+  let (tokens, rest') = collectStructFields rest
+   in case rest' of
+        (Token.Semicolon : rest'') -> Declaration.Struct name (parseStructFields tokens) : parseDeclarations rest''
+        (tk : rest'') -> Declaration.Invalid ("Expected semicolon, got " ++ show tk) : parseDeclarations rest''
+        [] -> [Declaration.Invalid "Expected semicolon"]
 parseDeclarations (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.Pr : rest) =
   case collectParameters rest of
     (params, Token.Semicolon : rest') -> parseFuncDef ty name params : parseDeclarations rest'
@@ -47,7 +49,7 @@ parseDeclarations (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.Pr 
        in parseFuncDec ty name params body : parseDeclarations rest''
     (_, rest') -> Declaration.Invalid "Expected semicolon" : parseDeclarations rest'
 parseDeclarations (Token.NL : rest) = parseDeclarations rest
-parseDeclarations (tk : _) = [Declaration.Invalid ("Unexpected token " ++ show tk)]
+parseDeclarations (tk : rest) = Declaration.Invalid ("Unexpected token " ++ show tk) : parseDeclarations rest
 
 collectUntil :: Token -> [Token] -> ([Token], [Token])
 collectUntil _ [] = ([], [])
@@ -221,8 +223,15 @@ collectFuncBody = collectUntilDelimiter Delimiter.Br
 parseFuncDec :: Type -> Id -> [(Type, Id)] -> [Token] -> Declaration
 parseFuncDec ty name params body = Declaration.FuncDec ty name params (parseStatementList body)
 
-collectStruct :: [Token] -> ([Token], [Token])
-collectStruct = collectUntilDelimiter Delimiter.Br
+collectStructFields :: [Token] -> ([Token], [Token])
+collectStructFields = collectUntilDelimiter Delimiter.Br
 
-parseStruct :: [Token] -> Declaration
-parseStruct _ = Declaration.Invalid "Structs not implemented"
+parseStructFields :: [Token] -> [(Type, Id)]
+parseStructFields [] = []
+parseStructFields (Token.NL : rest) = parseStructFields rest
+parseStructFields tokens = do
+  let (field, rest) = collectUntil Token.Semicolon tokens
+  case field of
+    [Token.Type ty, Token.Id name] -> (ty, name) : parseStructFields rest
+    (tk : _) -> error $ "Unexpected token : " ++ show tk
+    [] -> error "Empty field"

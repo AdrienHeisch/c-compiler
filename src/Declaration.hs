@@ -10,6 +10,6 @@ data Declaration
   | FuncDec Type Id [(Type, Id)] [Statement]
   | Global
   | Static
-  | Type
+  | Struct (Maybe Id) [(Type, Id)]
   | Invalid String
   deriving (Show)
