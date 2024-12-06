@@ -1,7 +1,7 @@
 enum Days : short {
     Mon,
     Tue,
-    Wen = 999,
+    Wen = -999,
     Tue,
     Fri = 77777
 };
