@@ -252,8 +252,8 @@ collectStructFields = collectUntilDelimiter Dl.Br
 structFields :: [Token] -> [(Type, Id)]
 structFields tokens = case Token.filterNL tokens of
   [] -> []
-  _ -> do
-    let (field, rest) = collectUntil Tk.Semicolon tokens
+  tokens' -> do
+    let (field, rest) = collectUntil Tk.Semicolon tokens'
     case field of
       [Tk.Type ty, Tk.Id name] -> (ty, name) : structFields rest
       (tk : _) -> error $ "Unexpected token : " ++ show tk
@@ -274,8 +274,8 @@ enumVariants :: [Token] -> [(Id, Maybe Expr)]
 enumVariants tokens = case Token.filterNL tokens of
   [] -> []
   (Tk.NL : rest) -> enumVariants rest
-  _ -> do
-    let (field, rest) = collectUntil (Tk.Op Op.Comma) tokens
+  tokens' -> do
+    let (field, rest) = collectUntil (Tk.Op Op.Comma) tokens'
     case field of
       (Tk.Id name : Tk.Op Op.Assign : rest') -> (name, Just $ expr rest') : enumVariants rest
       [Tk.Id name] -> (name, Nothing) : enumVariants rest
