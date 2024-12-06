@@ -1,6 +1,7 @@
 module Parser (parse) where
 
 import Constant (Constant (..))
+import Constant qualified (IntRepr)
 import Declaration (Declaration (..))
 import Expr as Ex (Expr (..))
 import Identifier (Id)
@@ -20,49 +21,45 @@ parse tokens = declarations (static tokens)
 static :: [Token] -> [Token]
 static tokens = case tokens of
   [] -> []
-  (Tk.Signed : Tk.Type ty : rest) -> static (Tk.Type (Type.signed ty) : rest)
-  (Tk.Unsigned : Tk.Type ty : rest) -> static (Tk.Type (Type.unsigned ty) : rest)
-  (Tk.Type ty : Tk.Op Op.MultOrIndir : rest) -> static (Tk.Type (Ty.Pointer ty) : rest)
+  (Tk.Signed : Tk.Type ty : rest) ->
+    static (Tk.Type (Type.signed ty) : rest)
+  (Tk.Unsigned : Tk.Type ty : rest) ->
+    static (Tk.Type (Type.unsigned ty) : rest)
+  (Tk.Type ty : Tk.Op Op.MultOrIndir : rest) ->
+    static (Tk.Type (Ty.Pointer ty) : rest)
   (Tk.Type ty : name@(Tk.Id _) : Tk.DelimOpen Dl.SqBr : Tk.IntLiteral (Constant len_ty len) : Tk.DelimClose Dl.SqBr : rest)
     | Type.isInteger len_ty ->
         static (Tk.Type (Ty.Array ty len) : name : rest)
   (Tk.Type ty : name@(Tk.Id _) : Tk.DelimOpen Dl.SqBr : Tk.DelimClose Dl.SqBr : rest) ->
     static (Tk.Type (Ty.ArrayNoHint ty) : name : rest)
-  (Tk.Struct : Tk.Id name : rest) -> static (Tk.Type (Ty.Struct (Just name)) : rest)
-  (Tk.Struct : rest) -> static (Tk.Type (Ty.Struct Nothing) : rest)
+  (Tk.Struct : Tk.Id name : rest) ->
+    static (Tk.Type (Ty.Struct (Just name)) : rest)
+  (Tk.Struct : rest) ->
+    static (Tk.Type (Ty.Struct Nothing) : rest)
   (tk : rest) -> tk : static rest
 
 declarations :: [Token] -> [Declaration]
 declarations tokens = case tokens of
   [] -> []
   [Eof] -> []
-  (Tk.Enum : Tk.Id name : Tk.Op Op.TernaryElse : Tk.Type ty : Tk.DelimOpen Dl.Br : rest) -> do
-    let (en, rest') = enum (Just name) ty rest
-    en : declarations rest'
-  (Tk.Enum : Tk.Op Op.TernaryElse : Tk.Type ty : Tk.DelimOpen Dl.Br : rest) -> do
-    let (en, rest') = enum Nothing ty rest
-    en : declarations rest'
-  (Tk.Enum : Tk.Id name : Tk.DelimOpen Dl.Br : rest) -> do
-    let (en, rest') = enum (Just name) Ty.Int rest
-    en : declarations rest'
-  (Tk.Enum : Tk.DelimOpen Dl.Br : rest) -> do
-    let (en, rest') = enum Nothing Ty.Int rest
-    en : declarations rest'
+  (Tk.Enum : Tk.Id name : Tk.Op Op.TernaryElse : Tk.Type ty : Tk.DelimOpen Dl.Br : rest) ->
+    put $ enum (Just name) ty rest
+  (Tk.Enum : Tk.Op Op.TernaryElse : Tk.Type ty : Tk.DelimOpen Dl.Br : rest) ->
+    put $ enum Nothing ty rest
+  (Tk.Enum : Tk.Id name : Tk.DelimOpen Dl.Br : rest) ->
+    put $ enum (Just name) Ty.Int rest
+  (Tk.Enum : Tk.DelimOpen Dl.Br : rest) ->
+    put $ enum Nothing Ty.Int rest
   (Tk.Type (Ty.Struct name) : Tk.DelimOpen Dl.Br : rest) ->
-    let (tokens', rest') = collectStructFields rest
-     in case rest' of
-          (Tk.Semicolon : rest'') -> Declaration.Struct name (structFields tokens') : declarations rest''
-          (tk : rest'') -> Declaration.Invalid ("Expected semicolon, got " ++ show tk) : declarations rest''
-          [] -> [Declaration.Invalid "Expected semicolon"]
+    put $ struct name rest
   (Tk.Type ty : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
-    case collectParameters rest of
-      (params, Tk.Semicolon : rest') -> funcDef ty name params : declarations rest'
-      (params, Tk.DelimOpen Dl.Br : rest') ->
-        let (body, rest'') = collectFuncBody rest'
-         in funcDec ty name params body : declarations rest''
-      (_, rest') -> Declaration.Invalid "Expected semicolon" : declarations rest'
+    put $ func ty name rest
   (Tk.NL : rest) -> declarations rest
   (tk : rest) -> Declaration.Invalid ("Unexpected token " ++ show tk) : declarations rest
+  where
+    put tuple =
+      let (declaration, rest) = tuple
+       in declaration : declarations rest
 
 -- collectDirective :: [Token] -> ([Token], [Token])
 -- collectDirective = collectUntil Tk.NL
@@ -106,63 +103,109 @@ statementList = parseList Tk.NL statement
 
 statement :: [Token] -> (Statement, [Token])
 statement tokens = case tokens of
-  [] -> (St.Empty, [])
-  (Tk.Semicolon : rest) -> (St.Empty, rest)
-  (Tk.If : Tk.DelimOpen Dl.Pr : rest) -> do
-    let (cond, rest') = collectUntilDelimiter Dl.Pr rest
-    let (then_, rest'') = statement rest'
-    case rest'' of
-      (Tk.Else : rest''') ->
-        let (else_, rest'''') = statement rest'''
-         in (St.If (expr cond) then_ (Just else_), rest'''')
-      _ -> (St.If (expr cond) then_ Nothing, rest'')
-  (Tk.Switch : Tk.DelimOpen Dl.Pr : rest) -> do
-    let (eval, rest') = collectUntilDelimiter Dl.Pr rest
-    let (body, rest'') = statement rest'
-     in (St.Switch (expr eval) body, rest'')
-  (Tk.While : Tk.DelimOpen Dl.Pr : rest) -> do
-    let (cond, rest') = collectUntilDelimiter Dl.Pr rest
-    let (body, rest'') = statement rest'
-     in (St.While (expr cond) body, rest'')
-  (Tk.Do : rest) -> do
-    let (body, rest') = statement rest
-    case rest' of
-      (Tk.While : Tk.DelimOpen Dl.Pr : rest'') -> do
-        let (cond, rest''') = collectUntilDelimiter Dl.Pr rest''
-        case rest''' of
-          (Tk.Semicolon : rest'''') -> (St.DoWhile body $ expr cond, rest'''')
-          _ -> (St.Invalid "Expected semicolon", rest')
-      _ -> (St.Invalid "Expected while (", rest')
-  (Tk.For : Tk.DelimOpen Dl.Pr : rest) -> do
-    let (decl, rest') = collectUntil Semicolon rest
-    let (cond, rest'') = collectUntil Semicolon rest'
-    let (incr, rest''') = collectUntilDelimiter Dl.Pr rest''
-    let (body, rest'''') = statement rest'''
-    case decl of
-      (Tk.Type ty : Tk.Id name : assign) ->
-        (St.ForVar (varStatement ty name assign) (expr <$> listToMaybeList cond) (expr <$> listToMaybeList incr) body, rest'''')
-      _ -> (St.For (expr <$> listToMaybeList decl) (expr <$> listToMaybeList cond) (expr <$> listToMaybeList incr) body, rest'''')
+  [] ->
+    (St.Empty, [])
+  (Tk.Semicolon : rest) ->
+    (St.Empty, rest)
+  (Tk.If : Tk.DelimOpen Dl.Pr : rest) ->
+    if_ rest
+  (Tk.Switch : Tk.DelimOpen Dl.Pr : rest) ->
+    switch rest
+  (Tk.While : Tk.DelimOpen Dl.Pr : rest) ->
+    while rest
+  (Tk.Do : rest) ->
+    doWhile rest
+  (Tk.For : Tk.DelimOpen Dl.Pr : rest) ->
+    for rest
   (Tk.DelimOpen Dl.Br : rest) ->
-    let (tokens', rest') = collectUntilDelimiter Dl.Br rest
-     in (St.Block (statementList tokens'), rest')
+    block rest
   (Tk.Return : rest) ->
-    case collectUntil Tk.Semicolon rest of
-      ([], rest') -> (St.Return Nothing, rest')
-      (tokens', rest') -> (St.Return (Just (expr tokens')), rest')
-  (Tk.Goto : Tk.Id label : Tk.Semicolon : rest) -> (St.Goto label, rest)
-  (Tk.Break : Tk.Semicolon : rest) -> (St.Break, rest)
-  (Tk.Continue : Tk.Semicolon : rest) -> (St.Continue, rest)
-  (Tk.Case : Tk.IntLiteral constant@(Constant ty _) : Tk.Op Op.TernaryElse : rest)
-    | Type.isInteger ty -> (St.Case constant, rest) -- TODO enum in case
-  (Tk.Id label : Tk.Op Op.TernaryElse : rest) ->
-    case rest of
-      (Tk.NL : Tk.Id _ : Tk.Op Op.TernaryElse : _) -> (St.Labeled label St.Empty, rest)
-      (Tk.Id _ : Tk.Op Op.TernaryElse : _) -> (St.Labeled label St.Empty, rest)
-      _ ->
-        let (st, rest') = statement rest
-         in (St.Labeled label st, rest')
-  (Tk.Type ty : Tk.Id name : tokens') -> simpleStatement (varStatement ty name) tokens'
-  _ -> simpleStatement (St.Expr . expr) tokens
+    return_ rest
+  (Tk.Goto : Tk.Id name : Tk.Semicolon : rest) ->
+    (St.Goto name, rest)
+  (Tk.Break : Tk.Semicolon : rest) ->
+    (St.Break, rest)
+  (Tk.Continue : Tk.Semicolon : rest) ->
+    (St.Continue, rest)
+  (Tk.Case : Tk.IntLiteral constant@(Constant ty _) : Tk.Op Op.TernaryElse : rest) ->
+    case_ constant ty rest
+  (Tk.Id name : Tk.Op Op.TernaryElse : rest) ->
+    label name rest
+  (Tk.Type ty : Tk.Id name : tokens') ->
+    simpleStatement (varStatement ty name) tokens'
+  _ ->
+    simpleStatement (St.Expr . expr) tokens
+
+if_ :: [Token] -> (Statement, [Token])
+if_ tokens = do
+  let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
+  let (then_, rest'') = statement rest'
+  case rest'' of
+    (Tk.Else : rest''') ->
+      let (else_, rest'''') = statement rest'''
+       in (St.If (expr cond) then_ (Just else_), rest'''')
+    _ -> (St.If (expr cond) then_ Nothing, rest'')
+
+switch :: [Token] -> (Statement, [Token])
+switch tokens = do
+  let (eval, rest') = collectUntilDelimiter Dl.Pr tokens
+  let (body, rest'') = statement rest'
+   in (St.Switch (expr eval) body, rest'')
+
+case_ :: Constant Constant.IntRepr -> Type -> b -> (Statement, b)
+case_ constant ty tokens =
+  ( if Type.isInteger ty
+      then St.Case constant -- TODO enum in case
+      else St.Invalid $ "Invalid type for case constant: " ++ show ty,
+    tokens
+  )
+
+while :: [Token] -> (Statement, [Token])
+while tokens = do
+  let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
+  let (body, rest'') = statement rest'
+   in (St.While (expr cond) body, rest'')
+
+doWhile :: [Token] -> (Statement, [Token])
+doWhile tokens = do
+  let (body, rest') = statement tokens
+  case rest' of
+    (Tk.While : Tk.DelimOpen Dl.Pr : rest'') -> do
+      let (cond, rest''') = collectUntilDelimiter Dl.Pr rest''
+      case rest''' of
+        (Tk.Semicolon : rest'''') -> (St.DoWhile body $ expr cond, rest'''')
+        _ -> (St.Invalid "Expected semicolon", rest')
+    _ -> (St.Invalid "Expected while (", rest')
+
+for :: [Token] -> (Statement, [Token])
+for tokens = do
+  let (decl, rest') = collectUntil Semicolon tokens
+  let (cond, rest'') = collectUntil Semicolon rest'
+  let (incr, rest''') = collectUntilDelimiter Dl.Pr rest''
+  let (body, rest'''') = statement rest'''
+  case decl of
+    (Tk.Type ty : Tk.Id name : assign) ->
+      (St.ForVar (varStatement ty name assign) (expr <$> listToMaybeList cond) (expr <$> listToMaybeList incr) body, rest'''')
+    _ -> (St.For (expr <$> listToMaybeList decl) (expr <$> listToMaybeList cond) (expr <$> listToMaybeList incr) body, rest'''')
+
+block :: [Token] -> (Statement, [Token])
+block tokens =
+  let (tokens', rest') = collectUntilDelimiter Dl.Br tokens
+   in (St.Block (statementList tokens'), rest')
+
+return_ :: [Token] -> (Statement, [Token])
+return_ tokens =
+  case collectUntil Tk.Semicolon tokens of
+    ([], rest') -> (St.Return Nothing, rest')
+    (tokens', rest') -> (St.Return (Just (expr tokens')), rest')
+
+label :: Id -> [Token] -> (Statement, [Token])
+label name tokens =
+  case Token.filterNL tokens of
+    (Tk.Id _ : Tk.Op Op.TernaryElse : _) -> (St.Labeled name St.Empty, tokens)
+    tokens' ->
+      let (st, rest') = statement tokens'
+       in (St.Labeled name st, rest')
 
 simpleStatement :: ([Token] -> Statement) -> [Token] -> (Statement, [Token])
 simpleStatement parser tokens =
@@ -183,17 +226,31 @@ exprList tokens = case tokens of
 
 expr :: [Token] -> Expr
 expr tokens = case tokens of
-  [] -> Ex.Invalid "Empty expression"
-  (Tk.NL : rest) -> expr rest
-  (Tk.BoolLiteral constant@(Constant Ty.Bool _) : rest) -> exprNext (Ex.BoolLiteral constant) rest
-  (Tk.IntLiteral constant : rest) | Type.isInteger $ Constant.ty constant -> exprNext (Ex.IntLiteral constant) rest
-  (Tk.FltLiteral constant : rest) | Type.isFloating $ Constant.ty constant -> exprNext (Ex.FltLiteral constant) rest
-  (Tk.StrLiteral constant@(Constant (Ty.Array Ty.Char _) _) : rest) -> exprNext (Ex.StrLiteral constant) rest
-  (Tk.Id identifier : rest) -> exprNext (Ex.Id identifier) rest
-  (Tk.Op op : rest) | Op.isUnaryPre op -> Ex.UnopPre op (expr rest)
-  (Tk.DelimOpen Dl.Br : rest) -> Ex.ArrayDecl (exprList (collectArrayDecl rest))
-  (Tk.DelimOpen Dl.Pr : rest) -> Ex.Parenthese (expr (collectParenthese rest))
-  _ -> Ex.Invalid ("Invalid expression : " ++ show tokens)
+  [] ->
+    Ex.Invalid "Empty expression"
+  (Tk.NL : rest) ->
+    expr rest
+  (Tk.BoolLiteral constant@(Constant Ty.Bool _) : rest) ->
+    exprNext (Ex.BoolLiteral constant) rest
+  (Tk.IntLiteral constant : rest)
+    | Type.isInteger $ Constant.ty constant ->
+        exprNext (Ex.IntLiteral constant) rest
+  (Tk.FltLiteral constant : rest)
+    | Type.isFloating $ Constant.ty constant ->
+        exprNext (Ex.FltLiteral constant) rest
+  (Tk.StrLiteral constant@(Constant (Ty.Array Ty.Char _) _) : rest) ->
+    exprNext (Ex.StrLiteral constant) rest
+  (Tk.Id identifier : rest) ->
+    exprNext (Ex.Id identifier) rest
+  (Tk.Op op : rest)
+    | Op.isUnaryPre op ->
+        Ex.UnopPre op (expr rest)
+  (Tk.DelimOpen Dl.Br : rest) ->
+    Ex.ArrayDecl (exprList (collectArrayDecl rest))
+  (Tk.DelimOpen Dl.Pr : rest) ->
+    Ex.Parenthese (expr (collectParenthese rest))
+  _ ->
+    Ex.Invalid ("Invalid expression : " ++ show tokens)
 
 exprNext :: Expr -> [Token] -> Expr
 exprNext ex tokens = case tokens of
@@ -237,6 +294,15 @@ collectParameters tokens = case tokens of
       (Tk.Type ty : Tk.Id name : _) -> [(ty, name)]
       _ -> error ("Invalid parameters : " ++ show tokens'')
 
+func :: Type -> Id -> [Token] -> (Declaration, [Token])
+func ty name tokens =
+  case collectParameters tokens of
+    (params, Tk.Semicolon : rest) -> (funcDef ty name params, rest)
+    (params, Tk.DelimOpen Dl.Br : rest) ->
+      let (body, rest') = collectFuncBody rest
+       in (funcDec ty name params body, rest')
+    (_, rest) -> (Declaration.Invalid "Expected semicolon", rest)
+
 funcDef :: Type -> Id -> [(Type, Id)] -> Declaration
 funcDef = Declaration.FuncDef
 
@@ -248,6 +314,14 @@ funcDec ty name params body = Declaration.FuncDec ty name params (statementList 
 
 collectStructFields :: [Token] -> ([Token], [Token])
 collectStructFields = collectUntilDelimiter Dl.Br
+
+struct :: Maybe Id -> [Token] -> (Declaration, [Token])
+struct name tokens = do
+  let (tokens', rest') = collectStructFields tokens
+  case rest' of
+    (Tk.Semicolon : rest'') -> (Declaration.Struct name (structFields tokens'), rest'')
+    (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
+    [] -> (Declaration.Invalid "Expected semicolon", rest')
 
 structFields :: [Token] -> [(Type, Id)]
 structFields tokens = case Token.filterNL tokens of
@@ -273,7 +347,6 @@ collectEnumVariants = collectUntilDelimiter Dl.Br
 enumVariants :: [Token] -> [(Id, Maybe Expr)]
 enumVariants tokens = case Token.filterNL tokens of
   [] -> []
-  (Tk.NL : rest) -> enumVariants rest
   tokens' -> do
     let (field, rest) = collectUntil (Tk.Op Op.Comma) tokens'
     case field of
