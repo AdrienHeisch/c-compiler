@@ -22,6 +22,7 @@ data Type
   | Array Type Int
   | ArrayNoHint Type
   | Struct (Maybe Id)
+  | Enum (Maybe Id) Type
   deriving (Show, Eq)
 
 signed :: Type -> Type

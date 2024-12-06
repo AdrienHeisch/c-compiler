@@ -1,4 +1,4 @@
-module Token (Token (..), Delimiter (..), make) where
+module Token (Token (..), Delimiter (..), make, filterNL) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr, BoolRepr)
@@ -163,6 +163,9 @@ make str = case str of
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
   _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
+
+filterNL :: [Token] -> [Token]
+filterNL = filter (/= Token.NL)
 
 keywordUnimplErr :: String -> a
 keywordUnimplErr keyword = error ("Unimplemented keyword : " ++ keyword)

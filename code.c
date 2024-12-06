@@ -1,10 +1,13 @@
-struct Person {
-    char name[12];
-    unsigned int age;
+enum Days : short {
+    Mon,
+    Tue,
+    Wen = 999,
+    Tue,
+    Fri = 77777
 };
 
 int main() {
-    struct Person p;
+    char day = Tue;
 
     return 0;
 }

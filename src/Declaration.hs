@@ -3,6 +3,7 @@ module Declaration (Declaration (..)) where
 import Identifier (Id)
 import Statement (Statement)
 import Type (Type (..))
+import Expr (Expr)
 
 data Declaration
   = Directive
@@ -11,5 +12,6 @@ data Declaration
   | Global
   | Static
   | Struct (Maybe Id) [(Type, Id)]
+  | Enum (Maybe Id) Type [(Id, Maybe Expr)]
   | Invalid String
   deriving (Show)

@@ -1,16 +1,17 @@
 module Parser (parse) where
 
-import Constant (Constant (..))
+import Constant (Constant (..), IntRepr)
 import Declaration (Declaration (..))
 import Expr (Expr (..))
 import Identifier (Id)
 import Op (Op (..), isBinary, isUnaryPost, isUnaryPre, precedence)
 import Statement (Statement (..))
-import Token (Token (..))
+import Token (Token (..), filterNL)
 import Token as Delimiter (Delimiter (..))
 import Type (Type, isFloating, isInteger, signed, unsigned)
 import Type qualified (Type (..))
 import Utils (listToMaybeList)
+import Debug.Trace (trace)
 
 parse :: [Token] -> [Declaration]
 parse tokens = parseDeclarations (staticParse tokens)
@@ -20,9 +21,10 @@ staticParse [] = []
 staticParse (Token.Signed : Token.Type ty : rest) = staticParse (Token.Type (signed ty) : rest)
 staticParse (Token.Unsigned : Token.Type ty : rest) = staticParse (Token.Type (unsigned ty) : rest)
 staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
-staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.IntLiteral (Constant Type.Int len) : Token.DelimClose Delimiter.SqBr : rest) =
-  -- TODO any integer type as length
-  staticParse (Token.Type (Type.Array ty len) : name : rest)
+staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.IntLiteral (Constant len_ty len) : Token.DelimClose Delimiter.SqBr : rest)
+  | isInteger len_ty =
+      -- TODO any integer type as length
+      staticParse (Token.Type (Type.Array ty len) : name : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
   staticParse (Token.Type (Type.ArrayNoHint ty) : name : rest)
 staticParse (Token.Struct : Token.Id name : rest) = staticParse (Token.Type (Type.Struct (Just name)) : rest)
@@ -32,9 +34,21 @@ staticParse (tk : rest) = tk : staticParse rest
 parseDeclarations :: [Token] -> [Declaration]
 parseDeclarations [] = []
 parseDeclarations [Eof] = []
-parseDeclarations (Token.Directive : rest) =
-  let (tokens, rest') = collectDirective rest
-   in parseDirective tokens : parseDeclarations rest'
+-- parseDeclarations (Token.Directive : rest) =
+--   let (tokens, rest') = collectDirective rest
+--    in parseDirective tokens : parseDeclarations rest'
+parseDeclarations (Token.Enum : Token.Id name : Token.Op Op.TernaryElse : Token.Type ty : Token.DelimOpen Delimiter.Br : rest) = do
+  let (enum, rest') = parseEnum (Just name) ty rest
+  enum : parseDeclarations rest'
+parseDeclarations (Token.Enum : Token.Op Op.TernaryElse : Token.Type ty : Token.DelimOpen Delimiter.Br : rest) = do
+  let (enum, rest') = parseEnum Nothing ty rest
+  enum : parseDeclarations rest'
+parseDeclarations (Token.Enum : Token.Id name : Token.DelimOpen Delimiter.Br : rest) = do
+  let (enum, rest') = parseEnum (Just name) Type.Int rest
+  enum : parseDeclarations rest'
+parseDeclarations (Token.Enum : Token.DelimOpen Delimiter.Br : rest) = do
+  let (enum, rest') = parseEnum Nothing Type.Int rest
+  enum : parseDeclarations rest'
 parseDeclarations (Token.Type (Type.Struct name) : Token.DelimOpen Delimiter.Br : rest) =
   let (tokens, rest') = collectStructFields rest
    in case rest' of
@@ -50,6 +64,12 @@ parseDeclarations (Token.Type ty : Token.Id name : Token.DelimOpen Delimiter.Pr 
     (_, rest') -> Declaration.Invalid "Expected semicolon" : parseDeclarations rest'
 parseDeclarations (Token.NL : rest) = parseDeclarations rest
 parseDeclarations (tk : rest) = Declaration.Invalid ("Unexpected token " ++ show tk) : parseDeclarations rest
+
+-- collectDirective :: [Token] -> ([Token], [Token])
+-- collectDirective = collectUntil Token.NL
+
+-- parseDirective :: [Token] -> Declaration
+-- parseDirective _ = Declaration.Directive
 
 collectUntil :: Token -> [Token] -> ([Token], [Token])
 collectUntil _ [] = ([], [])
@@ -190,17 +210,11 @@ collectArguments tokens = let (tokens', _) = collectUntilDelimiter Delimiter.Pr 
 collectIndex :: [Token] -> [Token]
 collectIndex tokens = let (tokens', _) = collectUntilDelimiter Delimiter.SqBr tokens in tokens'
 
-collectDirective :: [Token] -> ([Token], [Token])
-collectDirective = collectUntil Token.NL
-
 makeBinop :: Expr -> Op -> Expr -> Expr
 makeBinop left op Expr.Binop {left = r_left, op = r_op, right = r_right}
   | precedence op <= precedence r_op =
       Expr.Binop (makeBinop left op r_left) r_op r_right
 makeBinop left op right = Expr.Binop left op right
-
-parseDirective :: [Token] -> Declaration
-parseDirective _ = Declaration.Directive
 
 collectParameters :: [Token] -> ([(Type, Id)], [Token])
 collectParameters [] = ([], [])
@@ -233,5 +247,27 @@ parseStructFields tokens = do
   let (field, rest) = collectUntil Token.Semicolon tokens
   case field of
     [Token.Type ty, Token.Id name] -> (ty, name) : parseStructFields rest
+    (tk : _) -> error $ "Unexpected token : " ++ show tk
+    [] -> error "Empty field"
+
+parseEnum :: Maybe Id -> Type -> [Token] -> (Declaration, [Token])
+parseEnum name ty tokens =
+  let (tokens', rest') = collectEnumVariants tokens
+   in case rest' of
+        (Token.Semicolon : rest'') -> (Declaration.Enum name ty (parseEnumVariants $ filterNL tokens'), rest'')
+        (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
+        [] -> (Declaration.Invalid "Expected semicolon", rest')
+
+collectEnumVariants :: [Token] -> ([Token], [Token])
+collectEnumVariants = collectUntilDelimiter Delimiter.Br
+
+parseEnumVariants :: [Token] -> [(Id, Maybe Expr)]
+parseEnumVariants [] = []
+parseEnumVariants (Token.NL : rest) = parseEnumVariants rest
+parseEnumVariants tokens = do
+  let (field, rest) = collectUntil (Token.Op Op.Comma) tokens
+  case field of
+    (Token.Id name : Token.Op Op.Assign : expr) -> (name, Just $ parseExpr expr) : parseEnumVariants rest
+    [Token.Id name] -> (name, Nothing) : parseEnumVariants rest
     (tk : _) -> error $ "Unexpected token : " ++ show tk
     [] -> error "Empty field"
