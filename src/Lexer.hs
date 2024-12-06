@@ -29,12 +29,12 @@ lexFrom text from =
 
 takeToken :: Text -> Int -> (Token, Int)
 takeToken text from | from >= Text.length text = (Token.Eof, from)
-takeToken text from =
-   let cursor = getCursor text (Text.index text from) from
-       in case readCursor text cursor of
-            "//" -> (Token.Nil, skipLine text (Cursor.end cursor))
-            "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor))
-            str -> (Token.make str, Cursor.end cursor)
+takeToken text from = do
+  let cursor = getCursor text (Text.index text from) from
+  case readCursor text cursor of
+    "//" -> (Token.Nil, skipLine text (Cursor.end cursor))
+    "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor))
+    str -> (Token.make str, Cursor.end cursor)
 
 getCursor :: Text -> Char -> Int -> Cursor
 getCursor text first idx = do

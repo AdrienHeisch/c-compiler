@@ -1,6 +1,6 @@
 module Parser (parse) where
 
-import Constant (Constant (..), IntRepr)
+import Constant (Constant (..))
 import Declaration (Declaration (..))
 import Expr (Expr (..))
 import Identifier (Id)
@@ -11,7 +11,6 @@ import Token as Delimiter (Delimiter (..))
 import Type (Type, isFloating, isInteger, signed, unsigned)
 import Type qualified (Type (..))
 import Utils (listToMaybeList)
-import Debug.Trace (trace)
 
 parse :: [Token] -> [Declaration]
 parse tokens = parseDeclarations (staticParse tokens)
@@ -23,7 +22,6 @@ staticParse (Token.Unsigned : Token.Type ty : rest) = staticParse (Token.Type (u
 staticParse (Token.Type ty : Token.Op Op.MultOrIndir : rest) = staticParse (Token.Type (Type.Pointer ty) : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.IntLiteral (Constant len_ty len) : Token.DelimClose Delimiter.SqBr : rest)
   | isInteger len_ty =
-      -- TODO any integer type as length
       staticParse (Token.Type (Type.Array ty len) : name : rest)
 staticParse (Token.Type ty : name@(Token.Id _) : Token.DelimOpen Delimiter.SqBr : Token.DelimClose Delimiter.SqBr : rest) =
   staticParse (Token.Type (Type.ArrayNoHint ty) : name : rest)
@@ -108,39 +106,40 @@ parseStatementList = parseList Token.NL parseStatement
 parseStatement :: [Token] -> (Statement, [Token])
 parseStatement [] = (Statement.Empty, [])
 parseStatement (Token.Semicolon : rest) = (Statement.Empty, rest)
-parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) =
+parseStatement (Token.If : Token.DelimOpen Delimiter.Pr : rest) = do
   let (cond, rest') = collectUntilDelimiter Delimiter.Pr rest
-   in let (then_, rest'') = parseStatement rest'
-       in case rest'' of
-            (Token.Else : rest''') ->
-              let (else_, rest'''') = parseStatement rest'''
-               in (Statement.If (parseExpr cond) then_ (Just else_), rest'''')
-            _ -> (Statement.If (parseExpr cond) then_ Nothing, rest'')
-parseStatement (Token.Switch : Token.DelimOpen Delimiter.Pr : rest) =
+  let (then_, rest'') = parseStatement rest'
+  case rest'' of
+    (Token.Else : rest''') ->
+      let (else_, rest'''') = parseStatement rest'''
+       in (Statement.If (parseExpr cond) then_ (Just else_), rest'''')
+    _ -> (Statement.If (parseExpr cond) then_ Nothing, rest'')
+parseStatement (Token.Switch : Token.DelimOpen Delimiter.Pr : rest) = do
   let (eval, rest') = collectUntilDelimiter Delimiter.Pr rest
-   in let (body, rest'') = parseStatement rest'
-       in (Statement.Switch (parseExpr eval) body, rest'')
-parseStatement (Token.While : Token.DelimOpen Delimiter.Pr : rest) =
+  let (body, rest'') = parseStatement rest'
+   in (Statement.Switch (parseExpr eval) body, rest'')
+parseStatement (Token.While : Token.DelimOpen Delimiter.Pr : rest) = do
   let (cond, rest') = collectUntilDelimiter Delimiter.Pr rest
-   in let (body, rest'') = parseStatement rest'
-       in (Statement.While (parseExpr cond) body, rest'')
-parseStatement (Token.Do : rest) =
+  let (body, rest'') = parseStatement rest'
+   in (Statement.While (parseExpr cond) body, rest'')
+parseStatement (Token.Do : rest) = do
   let (body, rest') = parseStatement rest
-   in case rest' of
-        (Token.While : Token.DelimOpen Delimiter.Pr : rest'') ->
-          let (cond, rest''') = collectUntilDelimiter Delimiter.Pr rest''
-           in case rest''' of
-                (Token.Semicolon : rest'''') -> (Statement.DoWhile body $ parseExpr cond, rest'''')
-                _ -> (Statement.Invalid "Expected semicolon", rest')
-        _ -> (Statement.Invalid "Expected while (", rest')
-parseStatement (Token.For : Token.DelimOpen Delimiter.Pr : rest) =
+  case rest' of
+    (Token.While : Token.DelimOpen Delimiter.Pr : rest'') -> do
+      let (cond, rest''') = collectUntilDelimiter Delimiter.Pr rest''
+      case rest''' of
+        (Token.Semicolon : rest'''') -> (Statement.DoWhile body $ parseExpr cond, rest'''')
+        _ -> (Statement.Invalid "Expected semicolon", rest')
+    _ -> (Statement.Invalid "Expected while (", rest')
+parseStatement (Token.For : Token.DelimOpen Delimiter.Pr : rest) = do
   let (decl, rest') = collectUntil Semicolon rest
-   in let (cond, rest'') = collectUntil Semicolon rest'
-       in let (incr, rest''') = collectUntilDelimiter Delimiter.Pr rest''
-           in let (body, rest'''') = parseStatement rest'''
-               in case decl of
-                    (Token.Type ty : Token.Id name : assign) -> (Statement.ForVar (parseVarStatement ty name assign) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
-                    _ -> (Statement.For (parseExpr <$> listToMaybeList decl) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
+  let (cond, rest'') = collectUntil Semicolon rest'
+  let (incr, rest''') = collectUntilDelimiter Delimiter.Pr rest''
+  let (body, rest'''') = parseStatement rest'''
+  case decl of
+    (Token.Type ty : Token.Id name : assign) ->
+      (Statement.ForVar (parseVarStatement ty name assign) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
+    _ -> (Statement.For (parseExpr <$> listToMaybeList decl) (parseExpr <$> listToMaybeList cond) (parseExpr <$> listToMaybeList incr) body, rest'''')
 parseStatement (Token.DelimOpen Delimiter.Br : rest) =
   let (tokens, rest') = collectUntilDelimiter Delimiter.Br rest
    in (Statement.Block (parseStatementList tokens), rest')
@@ -251,12 +250,12 @@ parseStructFields tokens = do
     [] -> error "Empty field"
 
 parseEnum :: Maybe Id -> Type -> [Token] -> (Declaration, [Token])
-parseEnum name ty tokens =
+parseEnum name ty tokens = do
   let (tokens', rest') = collectEnumVariants tokens
-   in case rest' of
-        (Token.Semicolon : rest'') -> (Declaration.Enum name ty (parseEnumVariants $ filterNL tokens'), rest'')
-        (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
-        [] -> (Declaration.Invalid "Expected semicolon", rest')
+  case rest' of
+    (Token.Semicolon : rest'') -> (Declaration.Enum name ty (parseEnumVariants $ filterNL tokens'), rest'')
+    (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
+    [] -> (Declaration.Invalid "Expected semicolon", rest')
 
 collectEnumVariants :: [Token] -> ([Token], [Token])
 collectEnumVariants = collectUntilDelimiter Delimiter.Br
