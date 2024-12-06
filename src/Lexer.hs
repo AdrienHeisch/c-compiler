@@ -14,11 +14,12 @@ lex :: Text -> [Token]
 lex text = reduceTokens (lexFrom text 0)
 
 reduceTokens :: [Token] -> [Token]
-reduceTokens [] = []
-reduceTokens (Token.NL : Token.NL : rest) = reduceTokens (Token.NL : rest)
-reduceTokens (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.MemberPtr : Token.Id (Id str') : Token.Op Op.Gt : rest) =
-  reduceTokens (Token.ImplInclude (str ++ "." ++ str') : rest)
-reduceTokens (tk : rest) = tk : reduceTokens rest
+reduceTokens tokens = case tokens of
+  [] -> []
+  (Token.NL : Token.NL : rest) -> reduceTokens (Token.NL : rest)
+  (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.MemberPtr : Token.Id (Id str') : Token.Op Op.Gt : rest) ->
+    reduceTokens (Token.ImplInclude (str ++ "." ++ str') : rest)
+  (tk : rest) -> tk : reduceTokens rest
 
 lexFrom :: Text -> Int -> [Token]
 lexFrom text from =
@@ -28,13 +29,15 @@ lexFrom text from =
     (token, from') -> token : lexFrom text from'
 
 takeToken :: Text -> Int -> (Token, Int)
-takeToken text from | from >= Text.length text = (Token.Eof, from)
-takeToken text from = do
-  let cursor = getCursor text (Text.index text from) from
-  case readCursor text cursor of
-    "//" -> (Token.Nil, skipLine text (Cursor.end cursor))
-    "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor))
-    str -> (Token.make str, Cursor.end cursor)
+takeToken text from =
+  if from >= Text.length text
+    then (Token.Eof, from)
+    else do
+      let cursor = getCursor text (Text.index text from) from
+      case readCursor text cursor of
+        "//" -> (Token.Nil, skipLine text (Cursor.end cursor))
+        "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor))
+        str -> (Token.make str, Cursor.end cursor)
 
 getCursor :: Text -> Char -> Int -> Cursor
 getCursor text first idx = do
@@ -78,9 +81,13 @@ readCursor :: Text -> Cursor -> String
 readCursor text cursor = Text.unpack (Text.take (Cursor.len cursor) (Text.drop (Cursor.idx cursor) text))
 
 skipLine :: Text -> Int -> Int
-skipLine text idx | idx >= Text.length text || Text.index text idx == '\n' = idx
-skipLine text idx = skipLine text (idx + 1)
+skipLine text idx =
+  if idx >= Text.length text || Text.index text idx == '\n'
+    then idx
+    else skipLine text (idx + 1)
 
 skipBlock :: Text -> Int -> Int
-skipBlock text idx | idx + 1 >= Text.length text || readCursor text (Cursor idx 2) == "*/" = idx + 2
-skipBlock text idx = skipBlock text (idx + 1)
+skipBlock text idx =
+  if idx + 1 >= Text.length text || readCursor text (Cursor idx 2) == "*/"
+    then idx + 2
+    else skipBlock text (idx + 1)
