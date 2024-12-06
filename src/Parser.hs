@@ -21,45 +21,87 @@ parse tokens = declarations (static tokens)
 static :: [Token] -> [Token]
 static tokens = case tokens of
   [] -> []
-  (Tk.Signed : Tk.Type ty : rest) ->
-    static (Tk.Type (Type.signed ty) : rest)
-  (Tk.Unsigned : Tk.Type ty : rest) ->
-    static (Tk.Type (Type.unsigned ty) : rest)
-  (Tk.Type ty : Tk.Op Op.MultOrIndir : rest) ->
-    static (Tk.Type (Ty.Pointer ty) : rest)
-  (Tk.Type ty : name@(Tk.Id _) : Tk.DelimOpen Dl.SqBr : Tk.IntLiteral (Constant len_ty len) : Tk.DelimClose Dl.SqBr : rest)
-    | Type.isInteger len_ty ->
-        static (Tk.Type (Ty.Array ty len) : name : rest)
-  (Tk.Type ty : name@(Tk.Id _) : Tk.DelimOpen Dl.SqBr : Tk.DelimClose Dl.SqBr : rest) ->
-    static (Tk.Type (Ty.ArrayNoHint ty) : name : rest)
-  (Tk.Struct : Tk.Id name : rest) ->
-    static (Tk.Type (Ty.Struct (Just name)) : rest)
-  (Tk.Struct : rest) ->
-    static (Tk.Type (Ty.Struct Nothing) : rest)
-  (tk : rest) -> tk : static rest
+  ( Tk.Signed
+      : Tk.Type ty
+      : tks
+    ) -> static (Tk.Type (Type.signed ty) : tks)
+  ( Tk.Unsigned
+      : Tk.Type ty
+      : tks
+    ) -> static (Tk.Type (Type.unsigned ty) : tks)
+  ( Tk.Type ty
+      : Tk.Op Op.MultOrIndir
+      : tks
+    ) -> static (Tk.Type (Ty.Pointer ty) : tks)
+  ( Tk.Type ty
+      : name@(Tk.Id _)
+      : Tk.DelimOpen Dl.SqBr
+      : Tk.IntLiteral (Constant len_ty len)
+      : Tk.DelimClose Dl.SqBr
+      : tks
+    )
+      | Type.isInteger len_ty ->
+          static (Tk.Type (Ty.Array ty len) : name : tks)
+  ( Tk.Type ty
+      : name@(Tk.Id _)
+      : Tk.DelimOpen Dl.SqBr
+      : Tk.DelimClose Dl.SqBr
+      : tks
+    ) -> static (Tk.Type (Ty.ArrayNoHint ty) : name : tks)
+  ( Tk.Struct
+      : Tk.Id name
+      : tks
+    ) -> static (Tk.Type (Ty.Struct (Just name)) : tks)
+  ( Tk.Struct
+      : tks
+    ) -> static (Tk.Type (Ty.Struct Nothing) : tks)
+  (tk : tks) -> tk : static tks
 
 declarations :: [Token] -> [Declaration]
 declarations tokens = case tokens of
   [] -> []
   [Eof] -> []
-  (Tk.Enum : Tk.Id name : Tk.Op Op.TernaryElse : Tk.Type ty : Tk.DelimOpen Dl.Br : rest) ->
-    put $ enum (Just name) ty rest
-  (Tk.Enum : Tk.Op Op.TernaryElse : Tk.Type ty : Tk.DelimOpen Dl.Br : rest) ->
-    put $ enum Nothing ty rest
-  (Tk.Enum : Tk.Id name : Tk.DelimOpen Dl.Br : rest) ->
-    put $ enum (Just name) Ty.Int rest
-  (Tk.Enum : Tk.DelimOpen Dl.Br : rest) ->
-    put $ enum Nothing Ty.Int rest
-  (Tk.Type (Ty.Struct name) : Tk.DelimOpen Dl.Br : rest) ->
-    put $ struct name rest
-  (Tk.Type ty : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
-    put $ func ty name rest
-  (Tk.NL : rest) -> declarations rest
-  (tk : rest) -> Declaration.Invalid ("Unexpected token " ++ show tk) : declarations rest
+  ( Tk.Enum
+      : Tk.Id name
+      : Tk.Op Op.TernaryElse
+      : Tk.Type ty
+      : Tk.DelimOpen Dl.Br
+      : tks
+    ) -> put $ enum (Just name) ty tks
+  ( Tk.Enum
+      : Tk.Op Op.TernaryElse
+      : Tk.Type ty
+      : Tk.DelimOpen Dl.Br
+      : tks
+    ) -> put $ enum Nothing ty tks
+  ( Tk.Enum
+      : Tk.Id name
+      : Tk.DelimOpen Dl.Br
+      : tks
+    ) -> put $ enum (Just name) Ty.Int tks
+  ( Tk.Enum
+      : Tk.DelimOpen Dl.Br
+      : tks
+    ) -> put $ enum Nothing Ty.Int tks
+  ( Tk.Type (Ty.Struct name)
+      : Tk.DelimOpen Dl.Br
+      : tks
+    ) -> put $ struct name tks
+  ( Tk.Type ty
+      : Tk.Id name
+      : Tk.DelimOpen Dl.Pr
+      : tks
+    ) -> put $ func ty name tks
+  ( Tk.NL
+      : tks
+    ) -> declarations tks
+  ( tk
+      : tks
+    ) -> Declaration.Invalid ("Unexpected token " ++ show tk) : declarations tks
   where
     put tuple =
-      let (declaration, rest) = tuple
-       in declaration : declarations rest
+      let (declaration, tks) = tuple
+       in declaration : declarations tks
 
 -- collectDirective :: [Token] -> ([Token], [Token])
 -- collectDirective = collectUntil Tk.NL
@@ -70,10 +112,10 @@ declarations tokens = case tokens of
 collectUntil :: Token -> [Token] -> ([Token], [Token])
 collectUntil end tokens = case tokens of
   [] -> ([], [])
-  (tk : rest) | tk == end -> ([], rest)
-  (tk : rest) ->
-    let (tokens', rest') = collectUntil end rest
-     in (tk : tokens', rest')
+  (tk : tks) | tk == end -> ([], tks)
+  (tk : tks) ->
+    let (tks', rest) = collectUntil end tks
+     in (tk : tks', rest)
 
 collectUntilDelimiter :: Delimiter -> [Token] -> ([Token], [Token])
 collectUntilDelimiter del = collect 0
@@ -81,22 +123,22 @@ collectUntilDelimiter del = collect 0
     collect :: Int -> [Token] -> ([Token], [Token])
     collect depth tokens = case tokens of
       [] -> ([], [])
-      (tk : rest) | tk == Tk.DelimClose del && depth == 0 -> ([], rest)
-      (tk : rest) | tk == Tk.DelimClose del -> collectNext tk rest (depth - 1)
-      (tk : rest) | tk == Tk.DelimOpen del -> collectNext tk rest (depth + 1)
-      (tk : rest) -> collectNext tk rest depth
+      (tk : tks) | tk == Tk.DelimClose del && depth == 0 -> ([], tks)
+      (tk : tks) | tk == Tk.DelimClose del -> collectNext tk tks (depth - 1)
+      (tk : tks) | tk == Tk.DelimOpen del -> collectNext tk tks (depth + 1)
+      (tk : tks) -> collectNext tk tks depth
     collectNext :: Token -> [Token] -> Int -> ([Token], [Token])
     collectNext tk rest depth =
-      let (tokens', rest') = collect depth rest
-       in (tk : tokens', rest')
+      let (tks', rest') = collect depth rest
+       in (tk : tks', rest')
 
-parseList :: Token -> ([Token] -> (a, [Token])) -> [Token] -> [a]
+parseList :: Token -> ([Token] -> (el, [Token])) -> [Token] -> [el]
 parseList end parser tokens = case tokens of
   [] -> []
-  (tk : rest) | tk == end -> parseList end parser rest
+  (tk : tks) | tk == end -> parseList end parser tks
   _ ->
-    let (st, rest) = parser tokens
-     in st : parseList end parser rest
+    let (el, tks) = parser tokens
+     in el : parseList end parser tks
 
 statementList :: [Token] -> [Statement]
 statementList = parseList Tk.NL statement
@@ -105,36 +147,64 @@ statement :: [Token] -> (Statement, [Token])
 statement tokens = case tokens of
   [] ->
     (St.Empty, [])
-  (Tk.Semicolon : rest) ->
-    (St.Empty, rest)
-  (Tk.If : Tk.DelimOpen Dl.Pr : rest) ->
-    if_ rest
-  (Tk.Switch : Tk.DelimOpen Dl.Pr : rest) ->
-    switch rest
-  (Tk.While : Tk.DelimOpen Dl.Pr : rest) ->
-    while rest
-  (Tk.Do : rest) ->
-    doWhile rest
-  (Tk.For : Tk.DelimOpen Dl.Pr : rest) ->
-    for rest
-  (Tk.DelimOpen Dl.Br : rest) ->
-    block rest
-  (Tk.Return : rest) ->
-    return_ rest
-  (Tk.Goto : Tk.Id name : Tk.Semicolon : rest) ->
-    (St.Goto name, rest)
-  (Tk.Break : Tk.Semicolon : rest) ->
-    (St.Break, rest)
-  (Tk.Continue : Tk.Semicolon : rest) ->
-    (St.Continue, rest)
-  (Tk.Case : Tk.IntLiteral constant@(Constant ty _) : Tk.Op Op.TernaryElse : rest) ->
-    case_ constant ty rest
-  (Tk.Id name : Tk.Op Op.TernaryElse : rest) ->
-    label name rest
-  (Tk.Type ty : Tk.Id name : tokens') ->
-    simpleStatement (varStatement ty name) tokens'
-  _ ->
-    simpleStatement (St.Expr . expr) tokens
+  ( Tk.Semicolon
+      : tks
+    ) -> (St.Empty, tks)
+  ( Tk.If
+      : Tk.DelimOpen Dl.Pr
+      : tks
+    ) -> if_ tks
+  ( Tk.Switch
+      : Tk.DelimOpen Dl.Pr
+      : tks
+    ) -> switch tks
+  ( Tk.While
+      : Tk.DelimOpen Dl.Pr
+      : tks
+    ) -> while tks
+  ( Tk.Do
+      : tks
+    ) -> doWhile tks
+  ( Tk.For
+      : Tk.DelimOpen Dl.Pr
+      : tks
+    ) -> for tks
+  ( Tk.DelimOpen Dl.Br
+      : tks
+    ) -> block tks
+  ( Tk.Return
+      : tks
+    ) -> return_ tks
+  ( Tk.Goto
+      : Tk.Id name
+      : Tk.Semicolon
+      : tks
+    ) -> (St.Goto name, tks)
+  ( Tk.Break
+      : Tk.Semicolon
+      : tks
+    ) -> (St.Break, tks)
+  ( Tk.Continue
+      : Tk.Semicolon
+      : tks
+    ) -> (St.Continue, tks)
+  ( Tk.Case
+      : Tk.IntLiteral constant@(Constant ty _)
+      : Tk.Op Op.TernaryElse
+      : tks
+    ) -> case_ constant ty tks
+  ( Tk.Id
+      name
+      : Tk.Op Op.TernaryElse
+      : tks
+    ) -> label name tks
+  ( Tk.Type
+      ty
+      : Tk.Id name
+      : tks
+    ) -> simpleStatement (varStatement ty name) tks
+  tks ->
+    simpleStatement (St.Expr . expr) tks
 
 if_ :: [Token] -> (Statement, [Token])
 if_ tokens = do
@@ -185,8 +255,21 @@ for tokens = do
   let (body, rest'''') = statement rest'''
   case decl of
     (Tk.Type ty : Tk.Id name : assign) ->
-      (St.ForVar (varStatement ty name assign) (expr <$> listToMaybeList cond) (expr <$> listToMaybeList incr) body, rest'''')
-    _ -> (St.For (expr <$> listToMaybeList decl) (expr <$> listToMaybeList cond) (expr <$> listToMaybeList incr) body, rest'''')
+      ( St.ForVar
+          (varStatement ty name assign)
+          (expr <$> listToMaybeList cond)
+          (expr <$> listToMaybeList incr)
+          body,
+        rest''''
+      )
+    _ ->
+      ( St.For
+          (expr <$> listToMaybeList decl)
+          (expr <$> listToMaybeList cond)
+          (expr <$> listToMaybeList incr)
+          body,
+        rest''''
+      )
 
 block :: [Token] -> (Statement, [Token])
 block tokens =
@@ -221,44 +304,44 @@ varStatement ty name tokens = case tokens of
 exprList :: [Token] -> [Expr]
 exprList tokens = case tokens of
   [] -> []
-  (Tk.Op Op.Comma : rest) -> exprList rest
-  _ -> let (ex, rest) = collectUntil (Tk.Op Op.Comma) tokens in expr ex : exprList rest
+  (Tk.Op Op.Comma : tks) -> exprList tks
+  _ -> let (ex, tks) = collectUntil (Tk.Op Op.Comma) tokens in expr ex : exprList tks
 
 expr :: [Token] -> Expr
 expr tokens = case tokens of
   [] ->
     Ex.Invalid "Empty expression"
-  (Tk.NL : rest) ->
-    expr rest
-  (Tk.BoolLiteral constant@(Constant Ty.Bool _) : rest) ->
-    exprNext (Ex.BoolLiteral constant) rest
-  (Tk.IntLiteral constant : rest)
+  (Tk.NL : tks) ->
+    expr tks
+  (Tk.BoolLiteral constant@(Constant Ty.Bool _) : tks) ->
+    exprNext (Ex.BoolLiteral constant) tks
+  (Tk.IntLiteral constant : tks)
     | Type.isInteger $ Constant.ty constant ->
-        exprNext (Ex.IntLiteral constant) rest
-  (Tk.FltLiteral constant : rest)
+        exprNext (Ex.IntLiteral constant) tks
+  (Tk.FltLiteral constant : tks)
     | Type.isFloating $ Constant.ty constant ->
-        exprNext (Ex.FltLiteral constant) rest
-  (Tk.StrLiteral constant@(Constant (Ty.Array Ty.Char _) _) : rest) ->
-    exprNext (Ex.StrLiteral constant) rest
-  (Tk.Id identifier : rest) ->
-    exprNext (Ex.Id identifier) rest
-  (Tk.Op op : rest)
+        exprNext (Ex.FltLiteral constant) tks
+  (Tk.StrLiteral constant@(Constant (Ty.Array Ty.Char _) _) : tks) ->
+    exprNext (Ex.StrLiteral constant) tks
+  (Tk.Id identifier : tks) ->
+    exprNext (Ex.Id identifier) tks
+  (Tk.Op op : tks)
     | Op.isUnaryPre op ->
-        Ex.UnopPre op (expr rest)
-  (Tk.DelimOpen Dl.Br : rest) ->
-    Ex.ArrayDecl (exprList (collectArrayDecl rest))
-  (Tk.DelimOpen Dl.Pr : rest) ->
-    Ex.Parenthese (expr (collectParenthese rest))
-  _ ->
-    Ex.Invalid ("Invalid expression : " ++ show tokens)
+        Ex.UnopPre op (expr tks)
+  (Tk.DelimOpen Dl.Br : tks) ->
+    Ex.ArrayDecl (exprList (collectArrayDecl tks))
+  (Tk.DelimOpen Dl.Pr : tks) ->
+    Ex.Parenthese (expr (collectParenthese tks))
+  tks ->
+    Ex.Invalid ("Invalid expression : " ++ show tks)
 
 exprNext :: Expr -> [Token] -> Expr
 exprNext ex tokens = case tokens of
   [] -> ex
   [Tk.Op op] | Op.isUnaryPost op -> Ex.UnopPost op ex
-  (Tk.Op op : rest) | Op.isBinary op -> binop ex op (expr rest)
-  (Tk.DelimOpen Dl.SqBr : rest) -> binop ex Op.Subscript (expr (collectIndex rest))
-  (Tk.DelimOpen Dl.Pr : rest) -> Ex.Call ex (exprList (collectArguments rest))
+  (Tk.Op op : tks) | Op.isBinary op -> binop ex op (expr tks)
+  (Tk.DelimOpen Dl.SqBr : tks) -> binop ex Op.Subscript (expr (collectIndex tks))
+  (Tk.DelimOpen Dl.Pr : tks) -> Ex.Call ex (exprList (collectArguments tks))
   _ -> Ex.Invalid ("Invalid follow expression : " ++ show ex ++ ", " ++ show tokens)
 
 collectArrayDecl :: [Token] -> [Token]
