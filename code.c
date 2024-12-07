@@ -1,8 +1,8 @@
 // #include <stdio.h>
 // #define X 5
-#define STR(x) #x
-// #define PRINTSTR(x) printf("%s", #x)
-// #define PRINTSTR(x, y) printf("%s", #x #y)
+// #define STR(x) #x
+// #define PRINTSTR(x) printf("%s", # x)
+#define PRINTSTR(x, y) printf("%s %s", #x, #y)
 // #define VAR(a, b) a ## b
 
 /* enum Days : short {
@@ -17,8 +17,8 @@ int main() {
     // char day = Tue;
     // char a = 'a';
     // int l = X;
-    char s[] = STR(hello world);
-    // char s[] = STR(hello);
+    // PRINTSTR(  hello    world  );
+    PRINTSTR(hello , world );
     // int VAR(a, 1) = 5;
     // return 0;
 }

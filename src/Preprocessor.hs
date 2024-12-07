@@ -31,7 +31,7 @@ parseDirectives (directives, tokens) = case tokens of
     ) ->
       let (directive, rest) = collectDirective tks
        in case name of
-            "define" -> (parseDefine (cleanupTemplate directive) : directives, rest)
+            "define" -> (parseDefine directive : directives, rest)
             _ -> error $ "Unknown directive #" ++ name
   (tk : tks) ->
     let (new_directives, rest) = parseDirectives (directives, tks)
@@ -43,7 +43,7 @@ collectDirective = collectUntil Tk.NL
 cleanupTemplate :: [Token] -> [Token]
 cleanupTemplate tokens = case tokens of
   [] -> []
-  (Tk.Directive name : tks) -> Tk.Stringize : Tk.Id (Id name) : tks
+  (Tk.Directive name : tks) -> Tk.Stringize : Tk.Id (Id name) : cleanupTemplate tks
   (tk : tks) -> tk : cleanupTemplate tks
 
 applyDirectives :: [Directive] -> [Token] -> [Token]
@@ -59,12 +59,12 @@ parseDefine :: [Token] -> Directive
 parseDefine tokens = case tokens of
   (Tk.Nil : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
     let (params, rest') = collectDefineParams rest
-     in Define name params rest'
+     in Define name params (cleanupTemplate rest')
   (Tk.Nil : Tk.Id name : Tk.Nil : rest) -> Define name [] rest
   _ -> error "Define directive expected name"
 
 collectDefineParams :: [Token] -> ([Id], [Token])
-collectDefineParams tokens = case tokens of
+collectDefineParams tokens = case Token.filterNil tokens of
   [] -> ([], [])
   (Tk.Id name : Tk.DelimClose Dl.Pr : tks) -> ([name], tks)
   (Tk.Id name : Tk.Op Op.Comma : tks) ->
@@ -92,16 +92,19 @@ applyDefine name params template = apply
       -- FIXME why does this make the program hang
       -- \| length args < length params = error "Not enough arguments"
       -- \| length args > length params = error "Too many arguments"
-      | null args = tokens
+      | null args || null params = tokens
       | otherwise = go 0 args tokens
       where
+        lenParams :: Int
+        lenParams = length params
+
         go :: Int -> [[Token]] -> [Token] -> [Token]
         go idx args' tokens' = case args' of
           [] -> tokens'
           (arg : rest) ->
             let replacement = applyArg (params !! idx) arg tokens'
                 newIdx = idx + 1
-             in if newIdx < length params
+             in if newIdx < lenParams
                   then go newIdx rest replacement
                   else replacement
 
@@ -137,7 +140,7 @@ applyDefine name params template = apply
         parseArgs :: [Token] -> [[Token]]
         parseArgs tokens =
           let (arg, rest) = collectOne tokens
-           in arg : parseArgs rest
+           in trim arg : parseArgs rest
 
         -- TODO move to utils and replace in other occurences
         collectOne :: [Token] -> ([Token], [Token])
@@ -145,3 +148,11 @@ applyDefine name params template = apply
           [] -> ([], [])
           (Tk.Op Op.Comma : tks) -> collectOne tks
           _ -> collectUntil (Tk.Op Op.Comma) tokens
+
+        trim :: [Token] -> [Token]
+        trim = reverse . go' . reverse . go'
+          where
+            go' tokens = case tokens of
+              (Tk.Nil : tks) -> go' tks
+              (Tk.NL : tks) -> go' tks
+              _ -> tokens
