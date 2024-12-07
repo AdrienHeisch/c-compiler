@@ -99,6 +99,7 @@ declarations tokens = case tokens of
       : tks
     ) -> Declaration.Invalid ("Unexpected token " ++ show tk) : declarations tks
   where
+    put :: (Declaration, [Token]) -> [Declaration]
     put tuple =
       let (declaration, tks) = tuple
        in declaration : declarations tks
@@ -127,6 +128,7 @@ collectUntilDelimiter del = collect 0
       (tk : tks) | tk == Tk.DelimClose del -> collectNext tk tks (depth - 1)
       (tk : tks) | tk == Tk.DelimOpen del -> collectNext tk tks (depth + 1)
       (tk : tks) -> collectNext tk tks depth
+
     collectNext :: Token -> [Token] -> Int -> ([Token], [Token])
     collectNext tk rest depth =
       let (tks', rest') = collect depth rest
@@ -207,19 +209,19 @@ statement tokens = case tokens of
     simpleStatement (St.Expr . expr) tks
 
 if_ :: [Token] -> (Statement, [Token])
-if_ tokens = do
+if_ tokens =
   let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
-  let (then_, rest'') = statement rest'
-  case rest'' of
-    (Tk.Else : rest''') ->
-      let (else_, rest'''') = statement rest'''
-       in (St.If (expr cond) then_ (Just else_), rest'''')
-    _ -> (St.If (expr cond) then_ Nothing, rest'')
+      (then_, rest'') = statement rest'
+   in case rest'' of
+        (Tk.Else : rest''') ->
+          let (else_, rest'''') = statement rest'''
+           in (St.If (expr cond) then_ (Just else_), rest'''')
+        _ -> (St.If (expr cond) then_ Nothing, rest'')
 
 switch :: [Token] -> (Statement, [Token])
-switch tokens = do
+switch tokens =
   let (eval, rest') = collectUntilDelimiter Dl.Pr tokens
-  let (body, rest'') = statement rest'
+      (body, rest'') = statement rest'
    in (St.Switch (expr eval) body, rest'')
 
 case_ :: Constant Constant.IntRepr -> Type -> b -> (Statement, b)
@@ -231,45 +233,45 @@ case_ constant ty tokens =
   )
 
 while :: [Token] -> (Statement, [Token])
-while tokens = do
+while tokens =
   let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
-  let (body, rest'') = statement rest'
+      (body, rest'') = statement rest'
    in (St.While (expr cond) body, rest'')
 
 doWhile :: [Token] -> (Statement, [Token])
-doWhile tokens = do
+doWhile tokens =
   let (body, rest') = statement tokens
-  case rest' of
-    (Tk.While : Tk.DelimOpen Dl.Pr : rest'') -> do
-      let (cond, rest''') = collectUntilDelimiter Dl.Pr rest''
-      case rest''' of
-        (Tk.Semicolon : rest'''') -> (St.DoWhile body $ expr cond, rest'''')
-        _ -> (St.Invalid "Expected semicolon", rest')
-    _ -> (St.Invalid "Expected while (", rest')
+   in case rest' of
+        (Tk.While : Tk.DelimOpen Dl.Pr : rest'') ->
+          let (cond, rest''') = collectUntilDelimiter Dl.Pr rest''
+           in case rest''' of
+                (Tk.Semicolon : rest'''') -> (St.DoWhile body $ expr cond, rest'''')
+                _ -> (St.Invalid "Expected semicolon", rest')
+        _ -> (St.Invalid "Expected while (", rest')
 
 for :: [Token] -> (Statement, [Token])
-for tokens = do
+for tokens =
   let (decl, rest') = collectUntil Semicolon tokens
-  let (cond, rest'') = collectUntil Semicolon rest'
-  let (incr, rest''') = collectUntilDelimiter Dl.Pr rest''
-  let (body, rest'''') = statement rest'''
-  case decl of
-    (Tk.Type ty : Tk.Id name : assign) ->
-      ( St.ForVar
-          (varStatement ty name assign)
-          (expr <$> listToMaybeList cond)
-          (expr <$> listToMaybeList incr)
-          body,
-        rest''''
-      )
-    _ ->
-      ( St.For
-          (expr <$> listToMaybeList decl)
-          (expr <$> listToMaybeList cond)
-          (expr <$> listToMaybeList incr)
-          body,
-        rest''''
-      )
+      (cond, rest'') = collectUntil Semicolon rest'
+      (incr, rest''') = collectUntilDelimiter Dl.Pr rest''
+      (body, rest'''') = statement rest'''
+   in case decl of
+        (Tk.Type ty : Tk.Id name : assign) ->
+          ( St.ForVar
+              (varStatement ty name assign)
+              (expr <$> listToMaybeList cond)
+              (expr <$> listToMaybeList incr)
+              body,
+            rest''''
+          )
+        _ ->
+          ( St.For
+              (expr <$> listToMaybeList decl)
+              (expr <$> listToMaybeList cond)
+              (expr <$> listToMaybeList incr)
+              body,
+            rest''''
+          )
 
 block :: [Token] -> (Statement, [Token])
 block tokens =
@@ -283,12 +285,11 @@ return_ tokens =
     (tokens', rest') -> (St.Return (Just (expr tokens')), rest')
 
 label :: Id -> [Token] -> (Statement, [Token])
-label name tokens =
-  case Token.filterNL tokens of
-    (Tk.Id _ : Tk.Op Op.TernaryElse : _) -> (St.Labeled name St.Empty, tokens)
-    tokens' ->
-      let (st, rest') = statement tokens'
-       in (St.Labeled name st, rest')
+label name tokens = case Token.filterNL tokens of
+  (Tk.Id _ : Tk.Op Op.TernaryElse : _) -> (St.Labeled name St.Empty, tokens)
+  tokens' ->
+    let (st, rest') = statement tokens'
+     in (St.Labeled name st, rest')
 
 simpleStatement :: ([Token] -> Statement) -> [Token] -> (Statement, [Token])
 simpleStatement parser tokens =
@@ -399,30 +400,30 @@ collectStructFields :: [Token] -> ([Token], [Token])
 collectStructFields = collectUntilDelimiter Dl.Br
 
 struct :: Maybe Id -> [Token] -> (Declaration, [Token])
-struct name tokens = do
+struct name tokens =
   let (tokens', rest') = collectStructFields tokens
-  case rest' of
-    (Tk.Semicolon : rest'') -> (Declaration.Struct name (structFields tokens'), rest'')
-    (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
-    [] -> (Declaration.Invalid "Expected semicolon", rest')
+   in case rest' of
+        (Tk.Semicolon : rest'') -> (Declaration.Struct name (structFields tokens'), rest'')
+        (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
+        [] -> (Declaration.Invalid "Expected semicolon", rest')
 
 structFields :: [Token] -> [(Type, Id)]
 structFields tokens = case Token.filterNL tokens of
   [] -> []
-  tokens' -> do
+  tokens' ->
     let (field, rest) = collectUntil Tk.Semicolon tokens'
-    case field of
-      [Tk.Type ty, Tk.Id name] -> (ty, name) : structFields rest
-      (tk : _) -> error $ "Unexpected token : " ++ show tk
-      [] -> error "Empty field"
+     in case field of
+          [Tk.Type ty, Tk.Id name] -> (ty, name) : structFields rest
+          (tk : _) -> error $ "Unexpected token : " ++ show tk
+          [] -> error "Empty field"
 
 enum :: Maybe Id -> Type -> [Token] -> (Declaration, [Token])
-enum name ty tokens = do
+enum name ty tokens =
   let (tokens', rest') = collectEnumVariants tokens
-  case rest' of
-    (Tk.Semicolon : rest'') -> (Declaration.Enum name ty (enumVariants tokens'), rest'')
-    (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
-    [] -> (Declaration.Invalid "Expected semicolon", rest')
+   in case rest' of
+        (Tk.Semicolon : rest'') -> (Declaration.Enum name ty (enumVariants tokens'), rest'')
+        (tk : rest'') -> (Declaration.Invalid ("Expected semicolon, got " ++ show tk), rest'')
+        [] -> (Declaration.Invalid "Expected semicolon", rest')
 
 collectEnumVariants :: [Token] -> ([Token], [Token])
 collectEnumVariants = collectUntilDelimiter Dl.Br
@@ -430,10 +431,10 @@ collectEnumVariants = collectUntilDelimiter Dl.Br
 enumVariants :: [Token] -> [(Id, Maybe Expr)]
 enumVariants tokens = case Token.filterNL tokens of
   [] -> []
-  tokens' -> do
+  tokens' ->
     let (field, rest) = collectUntil (Tk.Op Op.Comma) tokens'
-    case field of
-      (Tk.Id name : Tk.Op Op.Assign : rest') -> (name, Just $ expr rest') : enumVariants rest
-      [Tk.Id name] -> (name, Nothing) : enumVariants rest
-      (tk : _) -> error $ "Unexpected token : " ++ show tk
-      [] -> error "Empty field"
+     in case field of
+          (Tk.Id name : Tk.Op Op.Assign : rest') -> (name, Just $ expr rest') : enumVariants rest
+          [Tk.Id name] -> (name, Nothing) : enumVariants rest
+          (tk : _) -> error $ "Unexpected token : " ++ show tk
+          [] -> error "Empty field"
