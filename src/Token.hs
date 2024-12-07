@@ -187,13 +187,7 @@ isStringLiteral _ = False
 isCharLiteral :: String -> Bool
 isCharLiteral "\'" = False
 isCharLiteral "\'\'" = False
-isCharLiteral ('\'' : cs) = last cs == '\'' {-  && continue cs -}
--- where
---   continue "" = False
---   continue ('\\' : cs') = esc cs'
---   continue (c' : cs') = False
---   esc "" = False
---   -- esc (c' : cs') =
+isCharLiteral ('\'' : cs) = last cs == '\''
 isCharLiteral _ = False
 
 isIdentifier :: String -> Bool

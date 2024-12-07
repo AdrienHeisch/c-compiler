@@ -78,8 +78,9 @@ applyDefine name params template = apply
 
     applyArgs :: [[Token]] -> [Token] -> [Token]
     applyArgs args tokens
-      -- | length args < length params = error "Not enough arguments"
-      -- | length args > length params = error "Too many arguments"
+      -- FIXME why does this make the program hang
+      -- \| length args < length params = error "Not enough arguments"
+      -- \| length args > length params = error "Too many arguments"
       | null args = tokens
       | otherwise = go 0 args tokens
       where
@@ -100,7 +101,7 @@ applyDefine name params template = apply
         go tokens = case tokens of
           [] -> []
           (Tk.Id param_ : tks) | param == param_ -> arg ++ go tks
-          (tk: tks) -> tk : go tks
+          (tk : tks) -> tk : go tks
 
     collectArgs :: [Token] -> ([[Token]], [Token])
     collectArgs = go
