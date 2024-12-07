@@ -37,8 +37,8 @@ data Op
   | Member
   | MemberPtr
   | Comma
-  | TernaryThen
-  | TernaryElse
+  | Ternary
+  | Colon
   | Subscript
   | Sizeof
   deriving (Show, Eq)
@@ -95,7 +95,7 @@ isBinary :: Op -> Bool
 isBinary op = op `elem` binary
 
 ternary :: [Op]
-ternary = [TernaryThen, TernaryElse]
+ternary = [Ternary, Colon]
 
 isTernary :: Op -> Bool
 isTernary op = op `elem` ternary

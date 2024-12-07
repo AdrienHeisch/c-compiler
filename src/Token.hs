@@ -2,12 +2,12 @@ module Token (Token (..), Delimiter (..), make, filterNL) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
+import Data.Char (ord)
 import Identifier qualified
 import Op (Op)
 import Op qualified (Op (..))
 import Type (Type)
 import Type qualified (Type (..))
-import Data.Char (ord)
 
 data Token
   = Type Type
@@ -142,8 +142,8 @@ make str = case str of
   "." -> Op Op.MemberPtr
   "=" -> Op Op.Assign
   "," -> Op Op.Comma
-  "?" -> Op Op.TernaryThen
-  ":" -> Op Op.TernaryElse
+  "?" -> Op Op.Ternary
+  ":" -> Op Op.Colon
   "(" -> DelimOpen Pr
   ")" -> DelimClose Pr
   "{" -> DelimOpen Br
@@ -190,13 +190,13 @@ isStringLiteral _ = False
 isCharLiteral :: String -> Bool
 isCharLiteral "\'" = False
 isCharLiteral "\'\'" = False
-isCharLiteral ('\'' : cs) = last cs == '\''{-  && continue cs -}
-  -- where 
-  --   continue "" = False
-  --   continue ('\\' : cs') = esc cs'
-  --   continue (c' : cs') = False
-  --   esc "" = False
-  --   -- esc (c' : cs') = 
+isCharLiteral ('\'' : cs) = last cs == '\'' {-  && continue cs -}
+-- where
+--   continue "" = False
+--   continue ('\\' : cs') = esc cs'
+--   continue (c' : cs') = False
+--   esc "" = False
+--   -- esc (c' : cs') =
 isCharLiteral _ = False
 
 isIdentifier :: String -> Bool

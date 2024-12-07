@@ -63,13 +63,13 @@ declarations tokens = case tokens of
   [Eof] -> []
   ( Tk.Enum
       : Tk.Id name
-      : Tk.Op Op.TernaryElse
+      : Tk.Op Op.Colon
       : Tk.Type ty
       : Tk.DelimOpen Dl.Br
       : tks
     ) -> put $ enum (Just name) ty tks
   ( Tk.Enum
-      : Tk.Op Op.TernaryElse
+      : Tk.Op Op.Colon
       : Tk.Type ty
       : Tk.DelimOpen Dl.Br
       : tks
@@ -187,12 +187,12 @@ statement tokens = case tokens of
     ) -> (St.Continue, tks)
   ( Tk.Case
       : Tk.IntLiteral constant@(Constant ty _)
-      : Tk.Op Op.TernaryElse
+      : Tk.Op Op.Colon
       : tks
     ) -> case_ constant ty tks
   ( Tk.Id
       name
-      : Tk.Op Op.TernaryElse
+      : Tk.Op Op.Colon
       : tks
     ) -> label name tks
   ( Tk.Type
@@ -281,7 +281,7 @@ return_ tokens =
 
 label :: Id -> [Token] -> (Statement, [Token])
 label name tokens = case Token.filterNL tokens of
-  (Tk.Id _ : Tk.Op Op.TernaryElse : _) -> (St.Labeled name St.Empty, tokens)
+  (Tk.Id _ : Tk.Op Op.Colon : _) -> (St.Labeled name St.Empty, tokens)
   tokens' ->
     let (st, rest') = statement tokens'
      in (St.Labeled name st, rest')
