@@ -76,7 +76,8 @@ executable compiler
         Statement,
         Expr,
         Utils,
-        Preprocessor
+        Preprocessor,
+        Delimiter
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

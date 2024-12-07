@@ -1,9 +1,10 @@
 module Parser (parse) where
 
-import Constant (Constant(..))
+import Constant (Constant (..))
 import Constant qualified
 import Declaration (Declaration)
 import Declaration qualified as Decl
+import Delimiter qualified as Dl
 import Expr (Expr)
 import Expr qualified as Ex
 import Identifier (Id)
@@ -12,7 +13,6 @@ import Op qualified
 import Statement (Statement)
 import Statement qualified as St
 import Token (Token)
-import Token qualified as Dl
 import Token qualified as Tk
 import Type (Type)
 import Type qualified as Ty

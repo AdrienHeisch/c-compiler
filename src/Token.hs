@@ -3,11 +3,13 @@ module Token (Token (..), Delimiter (..), make, filterNL) where
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Data.Char (ord)
+import Delimiter (Delimiter)
+import Delimiter qualified
 import Identifier qualified
 import Op (Op)
-import Op qualified (Op (..))
+import Op qualified
 import Type (Type)
-import Type qualified (Type (..))
+import Type qualified
 
 data Token
   = Type Type
@@ -43,12 +45,6 @@ data Token
   | NL
   | Nil
   | Eof
-  deriving (Show, Eq)
-
-data Delimiter
-  = Pr
-  | Br
-  | SqBr
   deriving (Show, Eq)
 
 make :: String -> Token
@@ -144,12 +140,12 @@ make str = case str of
   "," -> Op Op.Comma
   "?" -> Op Op.Ternary
   ":" -> Op Op.Colon
-  "(" -> DelimOpen Pr
-  ")" -> DelimClose Pr
-  "{" -> DelimOpen Br
-  "}" -> DelimClose Br
-  "[" -> DelimOpen SqBr
-  "]" -> DelimClose SqBr
+  "(" -> DelimOpen Delimiter.Pr
+  ")" -> DelimClose Delimiter.Pr
+  "{" -> DelimOpen Delimiter.Br
+  "}" -> DelimClose Delimiter.Br
+  "[" -> DelimOpen Delimiter.SqBr
+  "]" -> DelimClose Delimiter.SqBr
   "#" -> Directive
   "false" -> IntLiteral $ Constant Type.Bool 0
   "true" -> IntLiteral $ Constant Type.Bool 1
