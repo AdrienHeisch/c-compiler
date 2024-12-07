@@ -26,7 +26,7 @@ parseDirectives (directives, tokens) = case tokens of
     ) ->
       let (directive, rest) = collectDirective tks
        in case name of
-            "define" -> (parseDefine directive : directives, rest)
+            "define" -> (parseDefine (cleanupTemplate directive) : directives, rest)
             _ -> error $ "Unknown directive #" ++ name
   (tk : tks) ->
     let (new_directives, rest) = parseDirectives (directives, tks)
@@ -34,6 +34,12 @@ parseDirectives (directives, tokens) = case tokens of
 
 collectDirective :: [Token] -> ([Token], [Token])
 collectDirective = collectUntil Tk.NL
+
+cleanupTemplate :: [Token] -> [Token]
+cleanupTemplate tokens = case tokens of
+  [] -> []
+  (Tk.Directive name : tks) -> Tk.Stringize : Tk.Id (Id name) : tks
+  (tk : tks) -> tk : cleanupTemplate tks
 
 applyDirectives :: [Directive] -> [Token] -> [Token]
 applyDirectives directives tokens = case directives of
