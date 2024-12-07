@@ -21,25 +21,19 @@ process tokens =
 parseDirectives :: ([Directive], [Token]) -> ([Directive], [Token])
 parseDirectives (directives, tokens) = case tokens of
   [] -> (directives, [])
-  ( Tk.Directive
+  ( Tk.Directive name
       : tks
     ) ->
       let (directive, rest) = collectDirective tks
-       in (parseDirective directive : directives, rest)
+       in case name of
+            "define" -> (parseDefine directive : directives, rest)
+            _ -> error $ "Unknown directive #" ++ name
   (tk : tks) ->
     let (new_directives, rest) = parseDirectives (directives, tks)
      in (new_directives, tk : rest)
 
 collectDirective :: [Token] -> ([Token], [Token])
 collectDirective = collectUntil Tk.NL
-
-parseDirective :: [Token] -> Directive
-parseDirective tokens = case tokens of
-  (Tk.Id (Id "define") : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
-    let (params, rest') = collectDefineParams rest
-     in Define name params rest'
-  (Tk.Id (Id "define") : Tk.Id name : rest) -> Define name [] rest
-  _ -> error "Invalid directive"
 
 applyDirectives :: [Directive] -> [Token] -> [Token]
 applyDirectives directives tokens = case directives of
@@ -49,6 +43,14 @@ applyDirectives directives tokens = case directives of
 applyDirective :: Directive -> [Token] -> [Token]
 applyDirective directive tokens = case directive of
   Define name params template -> applyDefine name params template tokens
+
+parseDefine :: [Token] -> Directive
+parseDefine tokens = case tokens of
+  (Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
+    let (params, rest') = collectDefineParams rest
+     in Define name params rest'
+  (Tk.Id name : rest) -> Define name [] rest
+  _ -> error "Define directive expected name"
 
 collectDefineParams :: [Token] -> ([Id], [Token])
 collectDefineParams tokens = case tokens of

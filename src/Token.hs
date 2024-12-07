@@ -41,7 +41,7 @@ data Token
   | Semicolon
   | DelimOpen Delimiter
   | DelimClose Delimiter
-  | Directive
+  | Directive String
   | NL
   | Nil
   | Eof
@@ -156,6 +156,7 @@ make str = case str of
   _ | isIdentifier str -> Id (Identifier.Id str)
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
+  ('#' : directive) | isIdentifier directive -> Directive directive
   _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
 
 filterNL :: [Token] -> [Token]

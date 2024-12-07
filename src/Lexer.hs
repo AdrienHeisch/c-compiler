@@ -46,6 +46,7 @@ getCursor text idx = go (Cursor idx 1)
       | first == '\n' = getWhile cursor (== '\n')
       | first == '"' = getUntil cursor '"'
       | first == '\'' = getUntil cursor '\''
+      | first == '#' = getWhile cursor $ \c -> c `elem` CC.identifier
       | first `elem` CC.identifierStart = getWhile cursor $ \c -> c `elem` CC.identifier
       | first `elem` CC.digits = getWhile cursor $ \c -> c `elem` CC.float
       | first `elem` CC.punctuators = getWhile cursor $ \c -> c `elem` CC.punctuators
