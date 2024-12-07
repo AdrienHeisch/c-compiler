@@ -1,5 +1,5 @@
 // #include <stdio.h>
-// #define DOUBLE(n) 2 * n
+#define ADD(a, b) a + b
 
 /* enum Days : short {
     Mon,
@@ -13,6 +13,6 @@ int main() {
     // char day = Tue;
     // char a = 'a';
     // char s[] = "haha";
-    (n) + 2 * n;
+    int a = ADD(4, 5);
     // return 0;
 }

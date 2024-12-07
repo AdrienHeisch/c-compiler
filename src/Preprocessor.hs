@@ -1,12 +1,11 @@
 module Preprocessor (process) where
 
--- import Constant (Constant, IntRepr, FltRepr, StrRepr)
-
-import Debug.Trace (trace)
+import Delimiter qualified as Dl
 import Identifier (Id (..))
+import Op qualified
 import Token (Token)
 import Token qualified as Tk (Token (..))
-import Utils (collectUntil)
+import Utils (collectUntil, collectUntilDelimiter)
 
 data Directive
   = Define Id [Id] [Token]
@@ -15,7 +14,7 @@ data Directive
 process :: [Token] -> [Token]
 process tokens =
   let (directives, rest) = parseDirectives ([], tokens)
-      rest' = trace (show directives) applyDirectives directives rest
+      rest' = applyDirectives directives rest
    in rest'
 
 -- TODO force directive at fist position of line
@@ -36,6 +35,9 @@ collectDirective = collectUntil Tk.NL
 
 parseDirective :: [Token] -> Directive
 parseDirective tokens = case tokens of
+  (Tk.Id (Id "define") : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
+    let (params, rest') = collectDefineParams rest
+     in Define name params rest'
   (Tk.Id (Id "define") : Tk.Id name : rest) -> Define name [] rest
   _ -> error "Invalid directive"
 
@@ -46,14 +48,74 @@ applyDirectives directives tokens = case directives of
 
 applyDirective :: Directive -> [Token] -> [Token]
 applyDirective directive tokens = case directive of
-  Define name ids replace -> applyDefine name ids replace tokens
---   _ -> tokens
+  Define name params template -> applyDefine name params template tokens
+
+collectDefineParams :: [Token] -> ([Id], [Token])
+collectDefineParams tokens = case tokens of
+  [] -> ([], [])
+  (Tk.Id name : Tk.DelimClose Dl.Pr : tks) -> ([name], tks)
+  (Tk.Id name : Tk.Op Op.Comma : tks) ->
+    let (names, rest) = collectDefineParams tks
+     in (name : names, rest)
+  (tk : _) -> error $ "Expected identifier, got : " ++ show tk
 
 applyDefine :: Id -> [Id] -> [Token] -> [Token] -> [Token]
-applyDefine name ids replace = apply
+applyDefine name params template = apply
   where
     apply :: [Token] -> [Token]
     apply tokens = case tokens of
-      [] -> tokens
-      (Tk.Id name_ : tks) | name == name_ -> replace ++ applyDefine name ids replace tks
-      (tk : tks) -> tk : applyDefine name ids replace tks
+      [] -> []
+      (Tk.Id name_ : Tk.DelimOpen Dl.Pr : tks)
+        | name == name_ ->
+            let (args, rest) = collectArgs tks
+                replacement = applyArgs args template
+             in replacement ++ applyDefine name params template rest
+      (Tk.Id name_ : tks)
+        | name == name_ -> template ++ applyDefine name params template tks
+      (tk : tks) -> tk : applyDefine name params template tks
+
+    applyArgs :: [[Token]] -> [Token] -> [Token]
+    applyArgs args tokens
+      -- | length args < length params = error "Not enough arguments"
+      -- | length args > length params = error "Too many arguments"
+      | null args = tokens
+      | otherwise = go 0 args tokens
+      where
+        go :: Int -> [[Token]] -> [Token] -> [Token]
+        go idx args' tokens' = case args' of
+          [] -> tokens'
+          (arg : rest) ->
+            let replacement = applyArg (params !! idx) arg tokens'
+                newIdx = idx + 1
+             in if newIdx < length params
+                  then go newIdx rest replacement
+                  else replacement
+
+    applyArg :: Id -> [Token] -> [Token] -> [Token]
+    applyArg param arg = go
+      where
+        go :: [Token] -> [Token]
+        go tokens = case tokens of
+          [] -> []
+          (Tk.Id param_ : tks) | param == param_ -> arg ++ go tks
+          (tk: tks) -> tk : go tks
+
+    collectArgs :: [Token] -> ([[Token]], [Token])
+    collectArgs = go
+      where
+        go :: [Token] -> ([[Token]], [Token])
+        go tokens =
+          let (args, rest) = collectUntilDelimiter Dl.Pr tokens
+           in (parseArgs args, rest)
+
+        parseArgs :: [Token] -> [[Token]]
+        parseArgs tokens =
+          let (arg, rest) = collectOne tokens
+           in arg : parseArgs rest
+
+        -- TODO move to utils and replace in other occurences
+        collectOne :: [Token] -> ([Token], [Token])
+        collectOne tokens = case tokens of
+          [] -> ([], [])
+          (Tk.Op Op.Comma : tks) -> collectOne tks
+          _ -> collectUntil (Tk.Op Op.Comma) tokens
