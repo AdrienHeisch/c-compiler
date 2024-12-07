@@ -190,13 +190,11 @@ statement tokens = case tokens of
       : Tk.Op Op.Colon
       : tks
     ) -> case_ constant ty tks
-  ( Tk.Id
-      name
+  ( Tk.Id name
       : Tk.Op Op.Colon
       : tks
     ) -> label name tks
-  ( Tk.Type
-      ty
+  ( Tk.Type ty
       : Tk.Id name
       : tks
     ) -> simpleStatement (varStatement ty name) tks
