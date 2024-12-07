@@ -14,12 +14,12 @@ lex :: Text -> [Token]
 lex text = reduceTokens $ lexFrom text 0
 
 reduceTokens :: [Token] -> [Token]
-reduceTokens = foldr go []
-  where
-    go Token.NL (Token.NL : rest) = Token.NL : rest
-    go (Token.Op Op.Lt) (Token.Id (Id name) : Token.Op Op.MemberPtr : Token.Id (Id ext) : Token.Op Op.Gt : rest) =
-      Token.ImplInclude (name ++ "." ++ ext) : rest
-    go tk rest = tk : rest
+reduceTokens tokens = case tokens of
+  [] -> []
+  (Token.NL : Token.NL : rest) -> reduceTokens (Token.NL : rest)
+  (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.MemberPtr : Token.Id (Id str') : Token.Op Op.Gt : rest) ->
+    reduceTokens (Token.ImplInclude (str ++ "." ++ str') : rest)
+  (tk : rest) -> tk : reduceTokens rest
 
 lexFrom :: Text -> Int -> [Token]
 lexFrom text from = case takeToken text from of
@@ -49,8 +49,8 @@ getCursor text idx = go (Cursor idx 1)
       | first `elem` CC.digits = getWhile cursor $ \c -> c `elem` CC.float
       | first `elem` CC.punctuators = getWhile cursor $ \c -> c `elem` CC.punctuators
       | otherwise = cursor
-      
-    first =  Text.index text idx
+
+    first = Text.index text idx
 
     peek cursor = Text.index text (Cursor.end cursor)
 
