@@ -5,6 +5,7 @@ import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Data.Char (ord)
 import Delimiter (Delimiter)
 import Delimiter qualified
+import Identifier (Id)
 import Identifier qualified
 import Op (Op)
 import Op qualified
@@ -16,7 +17,7 @@ data Token
   | Signed
   | Unsigned
   | Op Op
-  | Id Identifier.Id
+  | Id Id
   | IntLiteral (Constant IntRepr)
   | FltLiteral (Constant FltRepr)
   | StrLiteral (Constant StrRepr)
