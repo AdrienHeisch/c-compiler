@@ -119,19 +119,20 @@ collectUntil end tokens = case tokens of
      in (tk : tks', rest)
 
 collectUntilDelimiter :: Delimiter -> [Token] -> ([Token], [Token])
-collectUntilDelimiter del = collect 0
+collectUntilDelimiter del = go 0
   where
-    collect :: Int -> [Token] -> ([Token], [Token])
-    collect depth tokens = case tokens of
+    go :: Int -> [Token] -> ([Token], [Token])
+    go depth tokens = case tokens of
       [] -> ([], [])
-      (tk : tks) | tk == Tk.DelimClose del && depth == 0 -> ([], tks)
-      (tk : tks) | tk == Tk.DelimClose del -> collectNext tk tks (depth - 1)
-      (tk : tks) | tk == Tk.DelimOpen del -> collectNext tk tks (depth + 1)
-      (tk : tks) -> collectNext tk tks depth
+      (tk : tks)
+        | tk == Tk.DelimClose del && depth == 0 -> ([], tks)
+        | tk == Tk.DelimClose del -> next tk tks (depth - 1)
+        | tk == Tk.DelimOpen del -> next tk tks (depth + 1)
+        | otherwise -> next tk tks depth
 
-    collectNext :: Token -> [Token] -> Int -> ([Token], [Token])
-    collectNext tk rest depth =
-      let (tks', rest') = collect depth rest
+    next :: Token -> [Token] -> Int -> ([Token], [Token])
+    next tk rest depth =
+      let (tks', rest') = go depth rest
        in (tk : tks', rest')
 
 parseList :: Token -> ([Token] -> (el, [Token])) -> [Token] -> [el]
