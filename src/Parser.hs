@@ -218,12 +218,11 @@ switch tokens =
    in (St.Switch (expr eval) body, rest'')
 
 case_ :: Constant Constant.IntRepr -> Type -> b -> (Statement, b)
-case_ constant ty tokens =
-  ( if Type.isInteger ty
-      then St.Case constant -- TODO enum in case
-      else St.Invalid $ "Invalid type for case constant: " ++ show ty,
-    tokens
-  )
+case_ constant ty tokens = (st, tokens)
+  where
+    st
+      | Type.isInteger ty = St.Case constant -- TODO enum in case
+      | otherwise = St.Invalid $ "Invalid type for case constant: " ++ show ty
 
 while :: [Token] -> (Statement, [Token])
 while tokens =
