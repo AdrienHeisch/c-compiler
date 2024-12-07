@@ -104,12 +104,6 @@ declarations tokens = case tokens of
       let (declaration, tks) = tuple
        in declaration : declarations tks
 
--- collectDirective :: [Token] -> ([Token], [Token])
--- collectDirective = collectUntil Tk.NL
-
--- parseDirective :: [Token] -> Declaration
--- parseDirective _ = Declaration.Directive
-
 collectUntil :: Token -> [Token] -> ([Token], [Token])
 collectUntil end tokens = case tokens of
   [] -> ([], [])
