@@ -40,6 +40,7 @@ takeToken text from
 getCursor :: Text -> Int -> Cursor
 getCursor text idx = go (Cursor idx 1)
   where
+    go :: Cursor -> Cursor
     go cursor
       | first == ' ' = getWhile cursor (== ' ')
       | first == '\n' = getWhile cursor (== '\n')
@@ -50,15 +51,19 @@ getCursor text idx = go (Cursor idx 1)
       | first `elem` CC.punctuators = getWhile cursor $ \c -> c `elem` CC.punctuators
       | otherwise = cursor
 
+    first :: Char
     first = Text.index text idx
 
+    peek :: Cursor -> Char
     peek cursor = Text.index text (Cursor.end cursor)
 
+    getUntil :: Cursor -> Char -> Cursor
     getUntil cursor terminator =
       if peek cursor == terminator
         then Cursor.expand cursor
         else getUntil (Cursor.expand cursor) terminator
 
+    getWhile :: Cursor -> (Char -> Bool) -> Cursor
     getWhile cursor predicate =
       if predicate (peek cursor)
         then getWhile (Cursor.expand cursor) predicate
