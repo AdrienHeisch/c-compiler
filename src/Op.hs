@@ -1,4 +1,4 @@
-module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, precedence) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, precedence, toStr) where
 
 data Op
   = Not
@@ -136,3 +136,46 @@ precedence op = case op of
   BitOrAssign -> 11
   Comma -> 12
   _ -> 99
+
+toStr :: Op -> String
+toStr op = case op of
+  Not -> "!"
+  AddOrPlus -> "+"
+  AddAssign -> "+="
+  MultOrIndir -> "*"
+  MultAssign -> "*="
+  Div -> "/"
+  DivAssign -> "/="
+  SubOrNeg -> "-"
+  SubAssign -> "-="
+  Mod -> "%"
+  ModAssign -> "%="
+  Equal -> "=="
+  NotEqual -> "!="
+  Gt -> ">"
+  Gte -> ">="
+  Lt -> "<"
+  Lte -> "<="
+  BoolAnd -> "&&"
+  BoolOr -> "||"
+  BitNot -> "~"
+  BitOr -> "|"
+  BitOrAssign -> "|="
+  BitAndOrAddr -> "&"
+  BitAndAssign -> "&="
+  BitXor -> "^"
+  BitXorAssign -> "^="
+  LShift -> "<<"
+  LShiftAssign -> "<<="
+  RShift -> ">>"
+  RShiftAssign -> ">>="
+  Increment -> "++"
+  Decrement -> "--"
+  Assign -> "="
+  Member -> "."
+  MemberPtr -> "->"
+  Comma -> ","
+  Ternary -> "?"
+  Colon -> ":"
+  Subscript -> "[]"
+  Sizeof -> "sizeof"

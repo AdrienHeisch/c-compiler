@@ -1,6 +1,7 @@
-module Type (Type (..), signed, unsigned, isInteger, isFloating) where
+module Type (Type (..), signed, unsigned, isInteger, isFloating, toStr) where
 
 import Identifier (Id)
+import Identifier qualified
 
 data Type
   = Void
@@ -80,3 +81,28 @@ floating =
 
 isFloating :: Type -> Bool
 isFloating ty = ty `elem` floating
+
+toStr :: Type -> String
+toStr ty = case ty of
+  Void -> "void"
+  Bool -> "bool"
+  Char -> "char"
+  UChar -> "unsigned char"
+  Short -> "short"
+  UShort -> "unsigned short"
+  Int -> "int"
+  UInt -> "unsigned int"
+  Long -> "long"
+  ULong -> "usigned long"
+  LLong -> "long long"
+  ULLong -> "unsigned long long"
+  Float -> "float"
+  Double -> "double"
+  LDouble -> "long double"
+  Pointer ty' -> toStr ty' ++ " *"
+  Array ty' len -> toStr ty' ++ " [" ++ show len ++ "]"
+  ArrayNoHint ty' -> toStr ty' ++ " []"
+  Struct Nothing -> "struct"
+  Struct (Just name) -> "struct" ++ Identifier.toStr name
+  Enum Nothing ty' -> "enum : " ++ toStr ty'
+  Enum (Just name) ty' -> "enum " ++ Identifier.toStr name ++ " : " ++ toStr ty'

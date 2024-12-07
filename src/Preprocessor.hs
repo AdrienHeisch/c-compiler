@@ -1,11 +1,15 @@
 module Preprocessor (process) where
 
+import Constant (Constant (..))
 import Delimiter qualified as Dl
 import Identifier (Id (..))
 import Op qualified
 import Token (Token)
+import Token qualified (toStr)
 import Token qualified as Tk (Token (..))
+import Type qualified as Ty (Type (..))
 import Utils (collectUntil, collectUntilDelimiter)
+import Debug.Trace (trace)
 
 data Directive
   = Define Id [Id] [Token]
@@ -14,7 +18,7 @@ data Directive
 process :: [Token] -> [Token]
 process tokens =
   let (directives, rest) = parseDirectives ([], tokens)
-      rest' = applyDirectives directives rest
+      rest' = trace (show directives) applyDirectives directives rest
    in rest'
 
 -- TODO force directive at fist position of line
@@ -106,8 +110,20 @@ applyDefine name params template = apply
         go :: [Token] -> [Token]
         go tokens = case tokens of
           [] -> []
+          (Tk.Stringize : Tk.Id param_ : tks) | param == param_ -> stringize arg : go tks
           (Tk.Id param_ : tks) | param == param_ -> arg ++ go tks
           (tk : tks) -> tk : go tks
+
+    stringize :: [Token] -> Token
+    stringize arg = Tk.StrLiteral $ Constant (Ty.Array Ty.Char $ length str) str
+      where
+        str :: String
+        str = toStr arg
+
+        toStr :: [Token] -> String
+        toStr tokens = case tokens of
+          [] -> ""
+          (tk : tks) -> Token.toStr tk ++ toStr tks
 
     collectArgs :: [Token] -> ([[Token]], [Token])
     collectArgs = go

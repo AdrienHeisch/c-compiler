@@ -1,8 +1,8 @@
-module Token (Token (..), Delimiter (..), make, filterNL) where
+module Token (Token (..), Delimiter (..), make, filterNL, toStr) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
-import Data.Char (ord)
+import Data.Char (ord, toLower)
 import Delimiter (Delimiter)
 import Delimiter qualified
 import Identifier (Id)
@@ -43,6 +43,8 @@ data Token
   | DelimOpen Delimiter
   | DelimClose Delimiter
   | Directive String
+  | Stringize
+  | TokenPaste
   | NL
   | Nil
   | Eof
@@ -147,7 +149,6 @@ make str = case str of
   "}" -> DelimClose Delimiter.Br
   "[" -> DelimOpen Delimiter.SqBr
   "]" -> DelimClose Delimiter.SqBr
-  "#" -> Directive
   "false" -> IntLiteral $ Constant Type.Bool 0
   "true" -> IntLiteral $ Constant Type.Bool 1
   _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (tail (take (length str - 1) str))
@@ -158,7 +159,27 @@ make str = case str of
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
   ('#' : directive) | isIdentifier directive -> Directive directive
+  "#" -> Stringize
+  "##" -> TokenPaste
   _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
+
+toStr :: Token -> String
+toStr token = case token of 
+  Type ty -> Type.toStr ty
+  Op op -> Op.toStr op
+  Id name -> Identifier.toStr name
+  DelimOpen dl -> Delimiter.toStrOpen dl
+  DelimClose dl -> Delimiter.toStrClose dl
+  IntLiteral (Constant _ int) -> show int
+  FltLiteral (Constant _ flt) -> show flt
+  StrLiteral (Constant _ str) -> str
+  ImplInclude str -> "<" ++ str ++ ">"
+  Semicolon -> ";"
+  Directive str -> "#" ++ str
+  NL -> "\n"
+  Nil -> ""
+  Eof -> ""
+  _ -> map toLower $ show token
 
 filterNL :: [Token] -> [Token]
 filterNL = filter (/= Token.NL)
