@@ -1,4 +1,4 @@
-module Constant (Constant (..), IntRepr, StrRepr, FltRepr, BoolRepr) where
+module Constant (Constant (..), IntRepr, StrRepr, FltRepr) where
 
 import Type (Type)
 
@@ -11,5 +11,3 @@ type IntRepr = Int
 type FltRepr = Float
 
 type StrRepr = String
-
-type BoolRepr = Bool

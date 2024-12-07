@@ -315,8 +315,6 @@ expr tokens = case tokens of
     Ex.Invalid "Empty expression"
   (Tk.NL : tks) ->
     expr tks
-  (Tk.BoolLiteral constant@(Constant Ty.Bool _) : tks) ->
-    exprNext (Ex.BoolLiteral constant) tks
   (Tk.IntLiteral constant : tks)
     | Type.isInteger $ Constant.ty constant ->
         exprNext (Ex.IntLiteral constant) tks

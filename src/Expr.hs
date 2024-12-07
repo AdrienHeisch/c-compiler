@@ -2,11 +2,10 @@ module Expr (Expr (..)) where
 
 import Identifier (Id)
 import Op (Op)
-import Constant (Constant, IntRepr, FltRepr, StrRepr, BoolRepr)
+import Constant (Constant, IntRepr, FltRepr, StrRepr)
 
 data Expr
   = Id Id
-  | BoolLiteral (Constant BoolRepr)
   | IntLiteral (Constant IntRepr)
   | FltLiteral (Constant FltRepr)
   | StrLiteral (Constant StrRepr)

@@ -1,14 +1,13 @@
 module Token (Token (..), Delimiter (..), make, filterNL) where
 
 import CharClasses qualified as CC
-import Constant (Constant (..), FltRepr, IntRepr, StrRepr, BoolRepr)
+import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Identifier qualified
 import Op (Op)
 import Op qualified (Op (..))
 import Type (Type)
 import Type qualified (Type (..))
 import Data.Char (ord)
-import Debug.Trace (trace)
 
 data Token
   = Type Type
@@ -19,7 +18,6 @@ data Token
   | IntLiteral (Constant IntRepr)
   | FltLiteral (Constant FltRepr)
   | StrLiteral (Constant StrRepr)
-  | BoolLiteral (Constant BoolRepr)
   | ImplInclude String
   | Const
   | If
@@ -153,10 +151,10 @@ make str = case str of
   "[" -> DelimOpen SqBr
   "]" -> DelimClose SqBr
   "#" -> Directive
-  "false" -> BoolLiteral $ Constant Type.Bool False
-  "true" -> BoolLiteral $ Constant Type.Bool True
+  "false" -> IntLiteral $ Constant Type.Bool 0
+  "true" -> IntLiteral $ Constant Type.Bool 1
   _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (tail (take (length str - 1) str))
-  _ | isCharLiteral str -> IntLiteral $ Constant Type.Char (ord $ read $ trace str str)
+  _ | isCharLiteral str -> IntLiteral $ Constant Type.Char (ord $ read str)
   _ | isIntLiteral str -> IntLiteral $ Constant Type.Int (read str)
   _ | isFltLiteral str -> FltLiteral $ Constant Type.Float (read str)
   _ | isIdentifier str -> Id (Identifier.Id str)

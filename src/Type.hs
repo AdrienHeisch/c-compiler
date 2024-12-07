@@ -55,7 +55,8 @@ unsigned ty = case ty of
 
 integer :: [Type]
 integer =
-  [ Char,
+  [ Bool,
+    Char,
     UChar,
     Short,
     UShort,
