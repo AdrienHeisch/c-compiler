@@ -292,7 +292,8 @@ expr tokens = case tokens of
   (Tk.DelimOpen Dl.Br : tks) ->
     Ex.ArrayDecl (exprList (collectArrayDecl tks))
   (Tk.DelimOpen Dl.Pr : tks) ->
-    Ex.Parenthese (expr (collectParenthese tks))
+    let (pr, rest) = collectParenthese tks
+     in exprNext (Ex.Parenthese (expr pr)) rest
   tks ->
     Ex.Invalid ("Invalid expression : " ++ show tks)
 
@@ -303,13 +304,13 @@ exprNext ex tokens = case tokens of
   (Tk.Op op : tks) | Op.isBinary op -> binop ex op (expr tks)
   (Tk.DelimOpen Dl.SqBr : tks) -> binop ex Op.Subscript (expr (collectIndex tks))
   (Tk.DelimOpen Dl.Pr : tks) -> Ex.Call ex (exprList (collectArguments tks))
-  _ -> Ex.Invalid ("Invalid follow expression : " ++ show ex ++ ", " ++ show tokens)
+  _ -> Ex.Invalid ("Invalid follow expression for " ++ show ex ++ " : " ++ show tokens)
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Dl.Br tokens in tokens'
 
-collectParenthese :: [Token] -> [Token]
-collectParenthese tokens = let (tokens', _) = collectUntilDelimiter Dl.Pr tokens in tokens'
+collectParenthese :: [Token] -> ([Token], [Token])
+collectParenthese tokens = let (pr, rest) = collectUntilDelimiter Dl.Pr tokens in (pr, rest)
 
 collectArguments :: [Token] -> [Token]
 collectArguments tokens = let (tokens', _) = collectUntilDelimiter Dl.Pr tokens in tokens'
