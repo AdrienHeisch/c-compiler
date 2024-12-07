@@ -1,15 +1,15 @@
 module Preprocessor (process) where
 
 import Constant (Constant (..))
+import Debug.Trace (trace)
 import Delimiter qualified as Dl
 import Identifier (Id (..))
 import Op qualified
 import Token (Token)
-import Token qualified (toStr)
+import Token qualified (filterNil, toStr)
 import Token qualified as Tk (Token (..))
 import Type qualified as Ty (Type (..))
 import Utils (collectUntil, collectUntilDelimiter)
-import Debug.Trace (trace)
 
 data Directive
   = Define Id [Id] [Token]
@@ -19,7 +19,8 @@ process :: [Token] -> [Token]
 process tokens =
   let (directives, rest) = parseDirectives ([], tokens)
       rest' = trace (show directives) applyDirectives directives rest
-   in rest'
+      rest'' = Token.filterNil rest'
+   in rest''
 
 -- TODO force directive at fist position of line
 parseDirectives :: ([Directive], [Token]) -> ([Directive], [Token])
@@ -56,10 +57,10 @@ applyDirective directive tokens = case directive of
 
 parseDefine :: [Token] -> Directive
 parseDefine tokens = case tokens of
-  (Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
+  (Tk.Nil : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
     let (params, rest') = collectDefineParams rest
      in Define name params rest'
-  (Tk.Id name : rest) -> Define name [] rest
+  (Tk.Nil : Tk.Id name : Tk.Nil : rest) -> Define name [] rest
   _ -> error "Define directive expected name"
 
 collectDefineParams :: [Token] -> ([Id], [Token])

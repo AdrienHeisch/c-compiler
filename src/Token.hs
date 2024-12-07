@@ -1,4 +1,4 @@
-module Token (Token (..), Delimiter (..), make, filterNL, toStr) where
+module Token (Token (..), Delimiter (..), make, filterNil, filterNL, toStr) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
@@ -163,23 +163,8 @@ make str = case str of
   "##" -> TokenPaste
   _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
 
-toStr :: Token -> String
-toStr token = case token of 
-  Type ty -> Type.toStr ty
-  Op op -> Op.toStr op
-  Id name -> Identifier.toStr name
-  DelimOpen dl -> Delimiter.toStrOpen dl
-  DelimClose dl -> Delimiter.toStrClose dl
-  IntLiteral (Constant _ int) -> show int
-  FltLiteral (Constant _ flt) -> show flt
-  StrLiteral (Constant _ str) -> str
-  ImplInclude str -> "<" ++ str ++ ">"
-  Semicolon -> ";"
-  Directive str -> "#" ++ str
-  NL -> "\n"
-  Nil -> ""
-  Eof -> ""
-  _ -> map toLower $ show token
+filterNil :: [Token] -> [Token]
+filterNil = filter (/= Token.Nil)
 
 filterNL :: [Token] -> [Token]
 filterNL = filter (/= Token.NL)
@@ -227,3 +212,21 @@ isNewLine "" = False
 isNewLine ('\n' : "") = True
 isNewLine ('\n' : cs) = isNewLine cs
 isNewLine _ = False
+
+toStr :: Token -> String
+toStr token = case token of 
+  Type ty -> Type.toStr ty
+  Op op -> Op.toStr op
+  Id name -> Identifier.toStr name
+  DelimOpen dl -> Delimiter.toStrOpen dl
+  DelimClose dl -> Delimiter.toStrClose dl
+  IntLiteral (Constant _ int) -> show int
+  FltLiteral (Constant _ flt) -> show flt
+  StrLiteral (Constant _ str) -> str
+  ImplInclude str -> "<" ++ str ++ ">"
+  Semicolon -> ";"
+  Directive str -> "#" ++ str
+  NL -> "\n"
+  Nil -> " "
+  Eof -> ""
+  _ -> map toLower $ show token
