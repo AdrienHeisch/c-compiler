@@ -1,10 +1,10 @@
 module Lexer (Lexer.lex) where
 
 import CharClasses qualified as CC
-import Cursor (Cursor (Cursor))
-import Cursor qualified (end, expand)
-import Data.Text as Text (Text)
-import Data.Text qualified as Text (drop, index, length, take, unpack)
+import Cursor (Cursor (..))
+import Cursor qualified
+import Data.Text (Text)
+import Data.Text qualified as Text
 import Identifier (Id (Id))
 import Op qualified
 import Token (Token)
