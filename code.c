@@ -14,5 +14,5 @@ int main() {
     // char a = 'a';
     // char s[] = "haha";
     int a = TEN;
-    return 0;
+    // return 0;
 }

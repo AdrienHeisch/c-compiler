@@ -6,8 +6,7 @@ import Type (Type (..))
 import Expr (Expr)
 
 data Declaration
-  = Directive
-  | FuncDef Type Id [(Type, Id)]
+  = FuncDef Type Id [(Type, Id)]
   | FuncDec Type Id [(Type, Id)] [Statement]
   | Global
   | Static
