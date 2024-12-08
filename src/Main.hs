@@ -9,7 +9,7 @@ main = do
   let tokens = Lexer.lex source
   putStrLn "Lexer : "
   print tokens
-  let preprocessed = Preprocessor.process tokens
+  preprocessed <- Preprocessor.process tokens
   putStrLn "Preprocessor : "
   print preprocessed
   let topLevel = Parser.parse preprocessed

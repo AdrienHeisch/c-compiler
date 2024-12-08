@@ -23,7 +23,7 @@ reduceTokens tokens = case tokens of
 
 lexFrom :: Text -> Int -> [Token]
 lexFrom text from = case takeToken text from of
-  (Token.Eof, _) -> [Token.Eof]
+  (Token.Eof, _) -> []
   -- (Token.Nil, from') -> lexFrom text from'
   (token, from') -> token : lexFrom text from'
 

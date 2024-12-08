@@ -1,9 +1,11 @@
 module Preprocessor (process) where
 
 import Constant (Constant (..))
+import Data.Text.IO qualified as TIO
 import Debug.Trace (trace)
 import Delimiter qualified as Dl
 import Identifier (Id (..))
+import Lexer qualified
 import Op qualified
 import Token (Token)
 import Token qualified (filterNil, toStr)
@@ -12,15 +14,16 @@ import Type qualified as Ty (Type (..))
 import Utils (collectUntil, collectUntilDelimiter)
 
 data Directive
-  = Define Id [Id] [Token]
+  = Include Bool String
+  | Define Id [Id] [Token]
   deriving (Show)
 
-process :: [Token] -> [Token]
-process tokens =
+process :: [Token] -> IO [Token]
+process tokens = do
   let (directives, rest) = parseDirectives ([], tokens)
-      rest' = trace (show directives) applyDirectives directives rest
-      rest'' = Token.filterNil rest'
-   in rest''
+  rest' <- trace (show directives) applyDirectives directives rest
+  let rest'' = Token.filterNil rest'
+   in return rest''
 
 -- TODO force directive at fist position of line
 parseDirectives :: ([Directive], [Token]) -> ([Directive], [Token])
@@ -31,6 +34,7 @@ parseDirectives (directives, tokens) = case tokens of
     ) ->
       let (directive, rest) = collectDirective tks
        in case name of
+            "include" -> (parseInclude directive : directives, rest)
             "define" -> (parseDefine directive : directives, rest)
             _ -> error $ "Unknown directive #" ++ name
   (tk : tks) ->
@@ -46,14 +50,24 @@ cleanupTemplate tokens = case tokens of
   (Tk.Directive name : tks) -> Tk.Stringize : Tk.Id (Id name) : cleanupTemplate tks
   (tk : tks) -> tk : cleanupTemplate tks
 
-applyDirectives :: [Directive] -> [Token] -> [Token]
+applyDirectives :: [Directive] -> [Token] -> IO [Token]
 applyDirectives directives tokens = case directives of
-  [] -> tokens
-  (directive : rest) -> applyDirectives rest $ applyDirective directive tokens
+  [] -> return tokens
+  (directive : rest) -> do
+    newTokens <- applyDirective directive tokens
+    applyDirectives rest newTokens
 
-applyDirective :: Directive -> [Token] -> [Token]
+applyDirective :: Directive -> [Token] -> IO [Token]
 applyDirective directive tokens = case directive of
-  Define name params template -> applyDefine name params template tokens
+  Include True _ -> error "Standard library not implemented"
+  Include False fileName -> applyInclude fileName tokens
+  Define name params template -> return (applyDefine name params template tokens)
+
+parseInclude :: [Token] -> Directive
+parseInclude tokens = case trace (show tokens) tokens of
+  [Tk.Nil, Tk.ImplInclude fileName] -> Include True fileName
+  [Tk.Nil, Tk.StrLiteral (Constant _ fileName)] -> Include False fileName
+  _ -> error "Invalid include"
 
 parseDefine :: [Token] -> Directive
 parseDefine tokens = case tokens of
@@ -71,6 +85,18 @@ collectDefineParams tokens = case Token.filterNil tokens of
     let (names, rest) = collectDefineParams tks
      in (name : names, rest)
   (tk : _) -> error $ "Expected identifier, got : " ++ show tk
+
+applyInclude :: String -> [Token] -> IO [Token]
+applyInclude fileName tokens = do
+  headerTokens <- includeHeader fileName
+  return (headerTokens ++ tokens)
+
+includeHeader :: FilePath -> IO [Token]
+includeHeader path = do
+  source <- TIO.readFile path
+  let tokens = Lexer.lex source
+      preprocessed = process tokens
+  preprocessed
 
 applyDefine :: Id -> [Id] -> [Token] -> [Token] -> [Token]
 applyDefine name params template = apply
