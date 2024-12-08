@@ -1,17 +1,25 @@
-import Data.Text.IO qualified as TIO
-import Lexer qualified (lex)
-import Preprocessor qualified (process)
+import Declaration (Declaration)
 import Parser qualified (parse)
+import Preprocessor qualified (process)
+import System.Environment (getArgs)
+import Token (Token)
 
 main :: IO ()
 main = do
-  source <- TIO.readFile "code.c"
-  let tokens = Lexer.lex source
-  putStrLn "Lexer : "
-  print tokens
-  preprocessed <- Preprocessor.process tokens
-  putStrLn "Preprocessor : "
-  print preprocessed
-  let topLevel = Parser.parse preprocessed
-  putStrLn "Parser : "
+  args <- getArgs
+  mapM_ compileFile args
+
+compileFile :: FilePath -> IO [Declaration]
+compileFile filePath = do
+  tokens <- addFile filePath
+  let topLevel = Parser.parse tokens
+  putStrLn $ "Parser " ++ filePath ++ " :"
   print topLevel
+  return topLevel
+
+addFile :: FilePath -> IO [Token]
+addFile filePath = do
+  tokens <- Preprocessor.process filePath
+  putStrLn $ "Preprocessor " ++ filePath ++ " :"
+  print tokens
+  return tokens

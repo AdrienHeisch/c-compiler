@@ -1,0 +1,1 @@
+#define ADD(x, y) add(x, y)
