@@ -45,5 +45,5 @@ errs = concatMap err
       ForVar st0 (Just e0) (Just e1) st1 -> Expr.errs [e0, e1, e1] ++ errs [st0, st1]
       Return (Just e) -> Expr.errs [e]
       Block block -> concatMap err block
-      Invalid str -> [str]
+      Invalid str -> [str ++ " at " ++ show (crs statement)]
       _ -> []

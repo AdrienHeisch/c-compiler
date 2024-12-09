@@ -16,7 +16,7 @@ import Identifier (Id)
 import Op (Op)
 import Op qualified
 import Statement (Statement (Statement))
-import Statement qualified (Statement (..))
+import Statement qualified as St (Statement (..))
 import Statement qualified as SD (StatementDef (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, parseList)
 import Token qualified (Token (..), filterNL)
@@ -24,6 +24,7 @@ import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
 import Utils (listToMaybeList)
+import Debug.Trace (trace)
 
 parse :: [Token] -> [Declaration]
 parse tokens =
@@ -112,6 +113,9 @@ statement :: [Token] -> (Statement, [Token])
 statement tokens = case tokens of
   [] ->
     (Statement (foldTkCrs tokens) SD.Empty, [])
+  Token crs TD.NL
+    : tks ->
+      (Statement crs SD.Empty, tks)
   Token crs TD.Semicolon
     : tks ->
       (Statement crs SD.Empty, tks)
@@ -154,10 +158,8 @@ statement tokens = case tokens of
     : tks ->
       (Statement (cl |+| cr) SD.Continue, tks)
   Token cursor TD.Case
-    : Token _ (TD.IntLiteral constant@(Constant ty _))
-    : Token _ (TD.Op Op.Colon)
     : tks ->
-      case_ cursor constant ty tks
+      case_ cursor tks
   Token cursor (TD.Id name)
     : Token _ (TD.Op Op.Colon)
     : tks ->
@@ -200,27 +202,31 @@ if_ cursor tokens =
    in case rest'' of
         Token _ TD.Else : rest''' ->
           let (else_, rest'''') = statement rest'''
-           in (Statement (cursor |+| Statement.crs else_) (SD.If (expr cond) then_ (Just else_)), rest'''')
-        _ -> (Statement (cursor |+| Statement.crs then_) (SD.If (expr cond) then_ Nothing), rest'')
+           in (Statement (cursor |+| St.crs else_) (SD.If (expr cond) then_ (Just else_)), rest'''')
+        _ -> (Statement (cursor |+| St.crs then_) (SD.If (expr cond) then_ Nothing), rest'')
 
 switch :: Cursor -> [Token] -> (Statement, [Token])
 switch cursor tokens =
   let (eval, rest') = collectUntilDelimiter Dl.Pr tokens
       (body, rest'') = statement rest'
-   in (Statement (cursor |+| Statement.crs body) (SD.Switch (expr eval) body), rest'')
+   in (Statement (cursor |+| St.crs body) (SD.Switch (expr eval) body), rest'')
 
-case_ :: Cursor -> Constant Constant.IntRepr -> Type -> [Token] -> (Statement, [Token])
-case_ cursor constant ty tokens = (Statement (cursor |+| foldTkCrs tokens) stDef, tokens)
-  where
-    stDef
-      | Ty.isInteger ty = SD.Case constant -- TODO enum in case
-      | otherwise = SD.Invalid $ "Invalid type for case constant: " ++ show ty
+case_ :: Cursor -> [Token] -> (Statement, [Token])
+case_ cursor tokens = case tokens of
+  Token _ (TD.IntLiteral constant@(Constant ty _))
+    : Token cursor' (TD.Op Op.Colon)
+    : rest
+      | Ty.isInteger ty -> (Statement (cursor |+| cursor') (SD.Case constant), rest)
+      | otherwise -> (Statement (cursor |+| cursor') (SD.Invalid $ "Invalid type for case constant: " ++ show ty), rest)
+  _ ->
+    let (tks, rest) = collectUntil (TD.Op Op.Colon) tokens
+     in (Statement (cursor |+| foldTkCrs tks) (SD.Invalid $ "Invalid case constant: " ++ show tks), rest)
 
 while :: Cursor -> [Token] -> (Statement, [Token])
 while cursor tokens =
   let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
       (body, rest'') = statement rest'
-   in (Statement (cursor |+| Statement.crs body) (SD.While (expr cond) body), rest'')
+   in (Statement (cursor |+| St.crs body) (SD.While (expr cond) body), rest'')
 
 doWhile :: Cursor -> [Token] -> (Statement, [Token])
 doWhile cursor tokens =
@@ -229,9 +235,10 @@ doWhile cursor tokens =
         Token _ TD.While : (Token _ (TD.DelimOpen Dl.Pr)) : rest'' ->
           let (cond, rest''') = collectUntilDelimiter Dl.Pr rest''
            in case rest''' of
-                (Token _ TD.Semicolon : rest'''') -> (Statement (cursor |+| Statement.crs body) (SD.DoWhile body $ expr cond), rest'''')
-                _ -> (Statement (cursor |+| Statement.crs body) (SD.Invalid "Expected semicolon"), rest')
-        _ -> (Statement (cursor |+| Statement.crs body) (SD.Invalid "Expected while ("), rest')
+                (Token _ TD.Semicolon : rest'''') -> (Statement (cursor |+| St.crs body) (SD.DoWhile body $ expr cond), rest'''')
+                _ -> (Statement (cursor |+| St.crs body) (SD.Invalid "Expected semicolon"), rest')
+        Token cursor' TD.While : rest'' -> (Statement (cursor |+| cursor') (SD.Invalid "Expected ("), rest'')
+        _ -> (Statement (cursor |+| St.crs body) (SD.Invalid "Expected while ("), rest')
 
 for :: Cursor -> [Token] -> (Statement, [Token])
 for cursor tokens =
@@ -239,7 +246,7 @@ for cursor tokens =
       (cond, rest'') = collectUntil TD.Semicolon rest'
       (incr, rest''') = collectUntilDelimiter Dl.Pr rest''
       (body, rest'''') = statement rest'''
-   in ( Statement (cursor |+| Statement.crs body) $ case decl of
+   in ( Statement (cursor |+| St.crs body) $ case decl of
           Token _ (TD.Type ty) : Token _ (TD.Id name) : assign ->
             SD.ForVar
               (varStatement (foldTkCrs tokens) ty name assign)
@@ -272,7 +279,7 @@ label cursor name tokens = case Token.filterNL tokens of
   Token _ (TD.Id _) : tk@(Token _ (TD.Op Op.Colon)) : _ -> (Statement (cursor |+| Token.crs tk) (SD.Labeled name (Statement (Token.crs tk) SD.Empty)), tokens)
   tokens' ->
     let (st, rest') = statement tokens'
-     in (Statement (cursor |+| Statement.crs st) (SD.Labeled name st), rest')
+     in (Statement (cursor |+| St.crs st) (SD.Labeled name st), rest')
 
 simpleStatement :: ([Token] -> Statement) -> [Token] -> (Statement, [Token])
 simpleStatement parser tokens =
