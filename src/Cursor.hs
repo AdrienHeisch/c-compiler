@@ -1,4 +1,4 @@
-module Cursor (Cursor (..), (|+|), end, expand, Cursor.head, Cursor.tail) where
+module Cursor (Cursor (..), (|+|), end, expand, Cursor.head, Cursor.tail, Cursor.fold) where
 
 data Cursor = Cursor {idx :: Int, len :: Int}
   deriving (Show)
@@ -14,6 +14,13 @@ head (Cursor idx _) = Cursor idx 1
 
 tail :: Cursor -> Cursor
 tail (Cursor idx len) = Cursor (idx Prelude.+ 1) (len - 1)
+
+fold :: [Cursor] -> Cursor
+fold cursors = go (Prelude.head cursors) (Prelude.tail cursors)
+    where
+        go :: Cursor -> [Cursor] -> Cursor
+        go cursor [] = cursor
+        go cursor (next : others) = cursor |+| go next others
 
 (|+|) :: Cursor -> Cursor -> Cursor
 Cursor idxL _ |+| Cursor _ lenR = Cursor idxL lenR

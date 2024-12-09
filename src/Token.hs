@@ -1,4 +1,4 @@
-module Token (Token (..), TokenDef (..), Delimiter (..), makeDef, filterNil, filterNL, toStr) where
+module Token (Token (..), TokenDef (..), Delimiter (..), errs, makeDef, filterNil, filterNL, defToStr, collectUntil, collectUntilDelimiter, parseList) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
@@ -12,24 +12,20 @@ import Op (Op)
 import Op qualified
 import Type (Type)
 import Type qualified
+import Utils (genErrs)
 
 data Token = Token {crs :: Cursor, def :: TokenDef}
-  -- deriving (Show)
+  deriving (Show)
 
-instance Show Token where
-  show :: Token -> String
-  show = show . def
-  
+-- instance Show Token where
+--   show :: Token -> String
+--   show token = (toStr . def) token ++ " at " ++ (show . crs) token
 
--- mkCrs :: [Token] -> Int -> Cursor
--- mkCrs tokens n = combine (crs $ head tokens) (crs $ tokens !! (n + 1))
-
--- mkCrs n tks = foldl combine (head crss) (take (n - 1) $ tail crss)
---   where crss = map crs tks
--- mkCrs _ 0 = error "Can't take 0 token !"
--- mkCrs [] _ = error "No token to take !"
--- mkCrs (tk : _) 1 = crs tk
--- mkCrs (tk : tks) n = crs tk `combine` mkCrs tks (n - 1)
+errs :: [Token] -> [String]
+errs = genErrs isInvalid
+  where
+    isInvalid (Token _ (Invalid _)) = True
+    isInvalid _ = False
 
 data TokenDef
   = Type Type
@@ -233,8 +229,8 @@ isNewLine ('\n' : "") = True
 isNewLine ('\n' : cs) = isNewLine cs
 isNewLine _ = False
 
-toStr :: Token -> String
-toStr token = case def token of
+defToStr :: TokenDef -> String
+defToStr tkDef = case tkDef of
   Type ty -> Type.toStr ty
   Op op -> Op.toStr op
   Id name -> Identifier.toStr name
@@ -249,4 +245,38 @@ toStr token = case def token of
   NL -> "\n"
   Nil -> " "
   Eof -> ""
-  tkDef -> map toLower $ show tkDef
+  Invalid str -> str
+  _ -> map toLower $ show tkDef
+
+collectUntil :: TokenDef -> [Token] -> ([Token], [Token])
+collectUntil end tokens = case tokens of
+  [] -> ([], [])
+  (tk : tks) | Token.def tk == end -> ([], tks)
+  (tk : tks) ->
+    let (tks', rest) = collectUntil end tks
+     in (tk : tks', rest)
+
+collectUntilDelimiter :: Delimiter -> [Token] -> ([Token], [Token])
+collectUntilDelimiter del = go 0
+  where
+    go :: Int -> [Token] -> ([Token], [Token])
+    go depth tokens = case tokens of
+      [] -> ([], [])
+      (tk : tks)
+        | Token.def tk == DelimClose del && depth == 0 -> ([], tks)
+        | Token.def tk == DelimClose del -> next tk tks (depth - 1)
+        | Token.def tk == DelimOpen del -> next tk tks (depth + 1)
+        | otherwise -> next tk tks depth
+
+    next :: Token -> [Token] -> Int -> ([Token], [Token])
+    next tk rest depth =
+      let (tks', rest') = go depth rest
+       in (tk : tks', rest')
+
+parseList :: TokenDef -> ([Token] -> (el, [Token])) -> [Token] -> [el]
+parseList end parser tokens = case tokens of
+  [] -> []
+  (tk : tks) | Token.def tk == end -> parseList end parser tks
+  _ ->
+    let (el, tks) = parser tokens
+     in el : parseList end parser tks

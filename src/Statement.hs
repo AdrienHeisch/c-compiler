@@ -1,7 +1,8 @@
-module Statement (Statement (..)) where
+module Statement (Statement (..), errs) where
 
 import Constant (Constant, IntRepr)
 import Expr (Expr)
+import Expr qualified (errs)
 import Identifier (Id)
 import Type (Type (..))
 
@@ -24,3 +25,21 @@ data Statement
   | Labeled Id Statement
   | Invalid String
   deriving (Show)
+
+errs :: [Statement] -> [String]
+errs = concatMap err
+  where
+    err :: Statement -> [String]
+    err statement = case statement of
+      Expr e -> Expr.errs [e]
+      Var _ _ (Just e) -> Expr.errs [e]
+      If e st0 (Just st1) -> Expr.errs [e] ++ errs [st0, st1]
+      Switch e st -> Expr.errs [e] ++ errs [st]
+      While e st -> Expr.errs [e] ++ errs [st]
+      DoWhile st e -> Expr.errs [e] ++ errs [st]
+      For (Just e0) (Just e1) (Just e2) st -> Expr.errs [e0, e1, e2] ++ errs [st]
+      ForVar st0 (Just e0) (Just e1) st1 -> Expr.errs [e0, e1, e1] ++ errs [st0, st1]
+      Return (Just e) -> Expr.errs [e]
+      Block block -> concatMap err block
+      Invalid str -> [str]
+      _ -> []

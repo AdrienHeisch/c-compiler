@@ -11,10 +11,10 @@ import Lexer qualified
 import Op qualified
 import System.FilePath (combine, normalise, takeDirectory)
 import Token (Token (..))
-import Token qualified (filterNil, toStr)
+import Token qualified (collectUntil, collectUntilDelimiter, errs, filterNil, defToStr)
 import Token qualified as TD (TokenDef (..))
 import Type qualified as Ty (Type (..))
-import Utils (collectUntil, collectUntilDelimiter)
+import Utils (genErrs)
 
 data Directive
   = Include Bool String
@@ -22,17 +22,9 @@ data Directive
   | Invalid String
   deriving (Show)
 
-errInvalidTokens :: [Token] -> String
-errInvalidTokens tokens = intercalate "\n" $ map show $ filter isInvalid tokens
+errs :: [Directive] -> [String]
+errs = genErrs isInvalid
   where
-    isInvalid :: Token -> Bool
-    isInvalid (Token _ (TD.Invalid _)) = True
-    isInvalid _ = False
-
-errInvalidDirectives :: [Directive] -> String
-errInvalidDirectives directives = intercalate "\n" $ map show $ filter isInvalid directives
-  where
-    isInvalid :: Directive -> Bool
     isInvalid (Invalid _) = True
     isInvalid _ = False
 
@@ -47,13 +39,13 @@ addFile :: FilePath -> IO ([Directive], [Token])
 addFile filePath = do
   source <- TIO.readFile filePath
   let tokens = Lexer.lex source
-      !_ = case errInvalidTokens tokens of
-        [] -> []
-        errs -> error $ "Lexer errors :\n" ++ errs
+      !_ = case Token.errs tokens of
+        [] -> ()
+        tkErrs -> error $ "Lexer errors :\n" ++ intercalate "\n" tkErrs
       (directives, rest) = parseDirectives [] tokens
-      !_ = case errInvalidDirectives directives of
-        [] -> []
-        errs -> error $ "Preprocessor errors :\n" ++ errs
+      !_ = case errs directives of
+        [] -> ()
+        directiveErrs -> error $ "Preprocessor errors :\n" ++ intercalate "\n" directiveErrs
   return (directives, rest)
 
 -- TODO force directive at fist position of line
@@ -75,7 +67,7 @@ parseDirectives directives tokens = case tokens of
        in (directive : directives', rest')
 
 collectDirective :: [Token] -> ([Token], [Token])
-collectDirective = collectUntil TD.NL
+collectDirective = Token.collectUntil TD.NL
 
 cleanupTemplate :: [Token] -> [Token]
 cleanupTemplate tokens = case tokens of
@@ -199,14 +191,14 @@ applyDefine name params template = apply
         toStr :: [Token] -> String
         toStr tokens = case tokens of
           [] -> ""
-          tk : tks -> Token.toStr tk ++ toStr tks
+          tk : tks -> (Token.defToStr . Token.def) tk ++ toStr tks
 
     collectArgs :: [Token] -> ([[Token]], [Token])
     collectArgs = go
       where
         go :: [Token] -> ([[Token]], [Token])
         go tokens =
-          let (args, rest) = collectUntilDelimiter Dl.Pr tokens
+          let (args, rest) = Token.collectUntilDelimiter Dl.Pr tokens
            in (parseArgs args, rest)
 
         parseArgs :: [Token] -> [[Token]]
@@ -219,7 +211,7 @@ applyDefine name params template = apply
         collectOne tokens = case map def tokens of
           [] -> ([], [])
           TD.Op Op.Comma : _ -> collectOne (tail tokens)
-          _ -> collectUntil (TD.Op Op.Comma) tokens
+          _ -> Token.collectUntil (TD.Op Op.Comma) tokens
 
         trim :: [Token] -> [Token]
         trim = reverse . go' . reverse . go'

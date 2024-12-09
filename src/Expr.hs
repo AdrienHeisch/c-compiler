@@ -1,10 +1,21 @@
-module Expr (Expr (..)) where
+module Expr (Expr (..), ExprDef (..), errs) where
 
 import Constant (Constant, FltRepr, IntRepr, StrRepr)
+import Cursor (Cursor)
 import Identifier (Id)
 import Op (Op)
+import Utils (genErrs)
 
-data Expr
+data Expr = Expr {crs :: Cursor, def :: ExprDef}
+  deriving (Show)
+
+errs :: [Expr] -> [String]
+errs = genErrs isInvalid
+  where
+    isInvalid (Expr _ (Invalid _)) = True
+    isInvalid _ = False
+
+data ExprDef
   = Id Id
   | IntLiteral (Constant IntRepr)
   | FltLiteral (Constant FltRepr)

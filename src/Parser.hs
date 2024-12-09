@@ -2,25 +2,34 @@ module Parser (parse) where
 
 import Constant (Constant (..))
 import Constant qualified
-import Cursor ((|+|))
+import Cursor (fold, (|+|))
+import Data.List (intercalate)
 import Declaration (Declaration)
-import Declaration qualified as Decl
+import Declaration qualified (errs)
+import Declaration qualified as Decl (Declaration (..))
 import Delimiter qualified as Dl
-import Expr (Expr)
-import Expr qualified as Ex
+import Expr (Expr (Expr))
+import Expr qualified (Expr (..))
+import Expr qualified as ED (ExprDef (..))
 import Identifier (Id)
 import Op (Op)
 import Op qualified
 import Statement (Statement)
 import Statement qualified as St
-import Token (Token (..), filterNL)
+import Token (Token (Token), collectUntil, collectUntilDelimiter, parseList)
+import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
-import Utils (collectUntil, collectUntilDelimiter, listToMaybeList, parseList)
+import Utils (listToMaybeList)
 
 parse :: [Token] -> [Declaration]
-parse tokens = declarations (static tokens)
+parse tokens =
+  let decls = declarations (static tokens)
+      !_ = case Declaration.errs decls of
+        [] -> ()
+        tkErrs -> error $ "Parser errors :\n" ++ intercalate "\n" tkErrs
+   in decls
 
 static :: [Token] -> [Token]
 static tokens = case tokens of
@@ -159,10 +168,10 @@ statement tokens = case tokens of
     : Token _ (TD.DelimClose Dl.SqBr)
     : tks
       | Ty.isInteger len_ty ->
-        -- let clr = cl |+| cr
-        --     nameLen = Cursor.len $ Token.crs name
-        --     name' = Token (Cursor nameCursor)
-        simpleStatement (varStatement (Ty.Array ty len) name) tks
+          -- let clr = cl |+| cr
+          --     nameLen = Cursor.len $ Token.crs name
+          --     name' = Token (Cursor nameCursor)
+          simpleStatement (varStatement (Ty.Array ty len) name) tks
   -- TODO array cursor
   Token _ (TD.Type ty)
     : (Token _ (TD.Id name))
@@ -277,38 +286,42 @@ exprList tokens = case tokens of
 expr :: [Token] -> Expr
 expr tokens = case tokens of
   [] ->
-    Ex.Invalid "Empty expression"
+    Expr cursor (ED.Invalid "Empty expression")
   Token _ TD.NL : tks ->
     expr tks
   Token _ (TD.IntLiteral constant) : tks
     | Ty.isInteger $ Constant.ty constant ->
-        exprNext (Ex.IntLiteral constant) tks
+        exprNext (Expr cursor (ED.IntLiteral constant)) tks
   Token _ (TD.FltLiteral constant) : tks
     | Ty.isFloating $ Constant.ty constant ->
-        exprNext (Ex.FltLiteral constant) tks
+        exprNext (Expr cursor (ED.FltLiteral constant)) tks
   Token _ (TD.StrLiteral constant@(Constant (Ty.Array Ty.Char _) _)) : tks ->
-    exprNext (Ex.StrLiteral constant) tks
+    exprNext (Expr cursor (ED.StrLiteral constant)) tks
   Token _ (TD.Id identifier) : tks ->
-    exprNext (Ex.Id identifier) tks
+    exprNext (Expr cursor (ED.Id identifier)) tks
   Token _ (TD.Op op) : tks
     | Op.isUnaryPre op ->
-        Ex.UnopPre op (expr tks)
+        Expr cursor (ED.UnopPre op (expr tks))
   Token _ (TD.DelimOpen Dl.Br) : tks ->
-    Ex.ArrayDecl (exprList (collectArrayDecl tks))
+    Expr cursor (ED.ArrayDecl (exprList (collectArrayDecl tks)))
   Token _ (TD.DelimOpen Dl.Pr) : tks ->
     let (pr, rest) = collectParenthese tks
-     in exprNext (Ex.Parenthese (expr pr)) rest
+     in exprNext (Expr cursor (ED.Parenthese (expr pr))) rest
   tks ->
-    Ex.Invalid ("Invalid expression : " ++ show tks)
+    Expr cursor (ED.Invalid ("Invalid expression : " ++ show tks))
+  where
+    cursor = Cursor.fold (map Token.crs tokens)
 
 exprNext :: Expr -> [Token] -> Expr
 exprNext ex tokens = case tokens of
   [] -> ex
-  [Token _ (TD.Op op)] | Op.isUnaryPost op -> Ex.UnopPost op ex
+  [Token _ (TD.Op op)] | Op.isUnaryPost op -> Expr cursor (ED.UnopPost op ex)
   Token _ (TD.Op op) : tks | Op.isBinary op -> binop ex op (expr tks)
   Token _ (TD.DelimOpen Dl.SqBr) : tks -> binop ex Op.Subscript (expr (collectIndex tks))
-  Token _ (TD.DelimOpen Dl.Pr) : tks -> Ex.Call ex (exprList (collectArguments tks))
-  _ -> Ex.Invalid ("Invalid follow expression for " ++ show ex ++ " : " ++ show tokens)
+  Token _ (TD.DelimOpen Dl.Pr) : tks -> Expr cursor (ED.Call ex (exprList (collectArguments tks)))
+  _ -> Expr cursor (ED.Invalid ("Invalid follow expression for " ++ show ex ++ " : " ++ show tokens))
+  where
+    cursor = Cursor.fold (map Token.crs tokens)
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Dl.Br tokens in tokens'
@@ -324,10 +337,12 @@ collectIndex tokens = let (tokens', _) = collectUntilDelimiter Dl.SqBr tokens in
 
 binop :: Expr -> Op -> Expr -> Expr
 binop left op right = case right of
-  Ex.Binop r_left r_op r_right
+  Expr cr (ED.Binop r_left r_op r_right)
     | Op.precedence op <= Op.precedence r_op ->
-        Ex.Binop (binop left op r_left) r_op r_right
-  _ -> Ex.Binop left op right
+        Expr (cl |+| cr) (ED.Binop (binop left op r_left) r_op r_right)
+  Expr cr _ -> Expr (cl |+| cr) (ED.Binop left op right)
+  where
+    cl = Expr.crs left
 
 collectParameters :: [Token] -> ([(Type, Id)], [Token])
 collectParameters tokens = case tokens of
