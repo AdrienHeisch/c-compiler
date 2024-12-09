@@ -344,30 +344,40 @@ binop left op right = case right of
   where
     cl = Expr.crs left
 
-collectParameters :: [Token] -> ([(Type, Id)], [Token])
+collectParameters :: [Token] -> (Either [(Type, Id)] String, [Token])
 collectParameters tokens = case tokens of
-  [] -> ([], [])
+  [] -> (Left [], [])
   _ ->
     let (tokens', rest) = collectUntilDelimiter Dl.Pr tokens
      in (makeList tokens', rest)
   where
-    makeList :: [Token] -> [(Type, Id)]
+    makeList :: [Token] -> Either [(Type, Id)] String
     makeList tokens'' = case tokens'' of
-      [] -> []
-      Token _ (TD.Type ty) : Token _ (TD.Id name) : Token _ (TD.Op Op.Comma) : rest -> (ty, name) : makeList rest
-      Token _ (TD.Type ty) : Token _ (TD.Id name) : _ -> [(ty, name)]
-      _ -> error ("Invalid parameters : " ++ show tokens'')
+      [] -> Left []
+      Token _ (TD.Type ty) : Token _ (TD.Id name) : Token _ (TD.Op Op.Comma) : rest -> next (ty, name) rest
+      Token _ (TD.Type ty) : Token _ (TD.Id name) : _ -> Left [(ty, name)]
+      _ -> Right ("Invalid parameters : " ++ show tokens'')
+      where
+        next el tks = case makeList tks of
+          Left els -> Left (el : els)
+          Right err -> Right err
 
 func :: Type -> Id -> [Token] -> (Declaration, [Token])
 func ty name tokens =
   case rest of
-    Token _ TD.Semicolon : rest' -> (funcDef ty name parameters, rest')
+    Token _ TD.Semicolon : rest' ->
+      case mparameters of
+        Left parameters -> (funcDef ty name parameters, rest')
+        Right err -> (Decl.Invalid err, rest')
     Token _ (TD.DelimOpen Dl.Br) : rest' ->
       let (body, rest'') = collectFuncBody rest'
-       in (funcDec ty name parameters body, rest'')
-    _ -> (Decl.Invalid "Expected semicolon", rest)
+       in case mparameters of
+            Left parameters ->
+              (funcDec ty name parameters body, rest'')
+            Right err -> (Decl.Invalid err, rest'')
+    _ -> (Decl.Invalid "Expected ; or {", rest)
   where
-    (parameters, rest) = collectParameters tokens
+    (mparameters, rest) = collectParameters tokens
 
 funcDef :: Type -> Id -> [(Type, Id)] -> Declaration
 funcDef = Decl.FuncDef
@@ -385,38 +395,50 @@ struct :: Maybe Id -> [Token] -> (Declaration, [Token])
 struct name tokens =
   let (tokens', rest') = collectStructFields tokens
    in case rest' of
-        Token _ TD.Semicolon : rest'' -> (Decl.Struct name (structFields tokens'), rest'')
+        Token _ TD.Semicolon : rest'' -> case structFields tokens' of
+          Left fields -> (Decl.Struct name fields, rest'')
+          Right err -> (Decl.Invalid err, rest'')
         tk : rest'' -> (Decl.Invalid ("Expected semicolon, got " ++ show tk), rest'')
         [] -> (Decl.Invalid "Expected semicolon", rest')
 
-structFields :: [Token] -> [(Type, Id)]
+structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = case Token.filterNL tokens of
-  [] -> []
+  [] -> Left []
   tokens' ->
     let (field, rest) = collectUntil TD.Semicolon tokens'
      in case field of
-          [Token _ (TD.Type ty), Token _ (TD.Id name)] -> (ty, name) : structFields rest
-          tk : _ -> error $ "Unexpected token : " ++ show tk
-          [] -> error "Empty field"
+          [Token _ (TD.Type ty), Token _ (TD.Id name)] -> next (ty, name) rest
+          tk : _ -> Right $ "Unexpected token : " ++ show tk
+          [] -> Right "Empty field"
+  where
+    next field tks = case structFields tks of
+      Left fields -> Left (field : fields)
+      Right err -> Right err
 
 enum :: Maybe Id -> Type -> [Token] -> (Declaration, [Token])
 enum name ty tokens =
   let (tokens', rest') = collectEnumVariants tokens
    in case rest' of
-        Token _ TD.Semicolon : rest'' -> (Decl.Enum name ty (enumVariants tokens'), rest'')
+        Token _ TD.Semicolon : rest'' -> case enumVariants tokens' of
+          Left variants -> (Decl.Enum name ty variants, rest'')
+          Right err -> (Decl.Invalid err, rest'')
         tk : rest'' -> (Decl.Invalid ("Expected semicolon, got " ++ show tk), rest'')
         [] -> (Decl.Invalid "Expected semicolon", rest')
 
 collectEnumVariants :: [Token] -> ([Token], [Token])
 collectEnumVariants = collectUntilDelimiter Dl.Br
 
-enumVariants :: [Token] -> [(Id, Maybe Expr)]
+enumVariants :: [Token] -> Either [(Id, Maybe Expr)] String
 enumVariants tokens = case Token.filterNL tokens of
-  [] -> []
+  [] -> Left []
   tokens' ->
-    let (field, rest) = collectUntil (TD.Op Op.Comma) tokens'
-     in case field of
-          Token _ (TD.Id name) : Token _ (TD.Op Op.Assign) : rest' -> (name, Just $ expr rest') : enumVariants rest
-          [Token _ (TD.Id name)] -> (name, Nothing) : enumVariants rest
-          tk : _ -> error $ "Unexpected token : " ++ show tk
-          [] -> error "Empty field"
+    let (variant, rest) = collectUntil (TD.Op Op.Comma) tokens'
+     in case variant of
+          Token _ (TD.Id name) : Token _ (TD.Op Op.Assign) : rest' -> next (name, Just $ expr rest') rest
+          [Token _ (TD.Id name)] -> next (name, Nothing) rest
+          tk : _ -> Right $ "Unexpected token : " ++ show tk
+          [] -> Right "Empty field"
+  where
+    next variant tks = case enumVariants tks of
+      Left variants -> Left (variant : variants)
+      Right err -> Right err

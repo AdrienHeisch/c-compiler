@@ -1,5 +1,6 @@
-int main() {
+int ?b;
+
+int main(int a) {
     // int a = 1 +++ 4;
-    / 0;
     return 0;
 }
