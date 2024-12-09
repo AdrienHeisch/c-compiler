@@ -1,8 +1,8 @@
-module Token (Token (..), TokenDef (..), Delimiter (..), errs, makeDef, filterNil, filterNL, defToStr, collectUntil, collectUntilDelimiter, parseList) where
+module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef, filterNil, filterNL, defToStr, collectUntil, collectUntilDelimiter, parseList) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
-import Cursor (Cursor)
+import Cursor (Cursor, fold)
 import Data.Char (ord, toLower)
 import Delimiter (Delimiter)
 import Delimiter qualified
@@ -26,6 +26,9 @@ errs = genErrs isInvalid
   where
     isInvalid (Token _ (Invalid _)) = True
     isInvalid _ = False
+
+foldCrs :: [Token] -> Cursor
+foldCrs = Cursor.fold . map Token.crs
 
 data TokenDef
   = Type Type

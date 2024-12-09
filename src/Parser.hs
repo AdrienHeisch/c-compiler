@@ -1,7 +1,7 @@
 module Parser (parse) where
 
 import Constant (Constant (..))
-import Cursor (Cursor, fold, (|+|))
+import Cursor (Cursor, CursorOps (..))
 import Data.List (intercalate)
 import Declaration (Declaration (Declaration), DeclarationDef)
 import Declaration qualified (errs)
@@ -17,7 +17,7 @@ import Statement (Statement (Statement))
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, parseList)
-import Token qualified (Token (..), filterNL)
+import Token qualified (Token (..), filterNL, foldCrs)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
@@ -109,7 +109,7 @@ statementList = parseList TD.NL statement
 statement :: [Token] -> (Statement, [Token])
 statement tokens = case tokens of
   [] ->
-    (Statement (foldTkCrs tokens) SD.Empty, [])
+    (Statement (Token.foldCrs tokens) SD.Empty, [])
   Token crs TD.NL
     : tks ->
       (Statement crs SD.Empty, tks)
@@ -161,7 +161,6 @@ statement tokens = case tokens of
     : Token _ (TD.Op Op.Colon)
     : tks ->
       label cursor name tks
-  -- TODO array cursor
   Token cl (TD.Type ty)
     : Token _ (TD.Id name)
     : Token _ (TD.DelimOpen Dl.SqBr)
@@ -169,11 +168,7 @@ statement tokens = case tokens of
     : Token cr (TD.DelimClose Dl.SqBr)
     : tks
       | Ty.isInteger len_ty ->
-          -- let clr = cl |+| cr
-          --     nameLen = Cursor.len $ Token.crs name
-          --     name' = Token (Cursor nameCursor)
           simpleStatement (varStatement (cl |+| cr) (Ty.Array ty len) name) tks
-  -- TODO array cursor
   Token cl (TD.Type ty)
     : (Token _ (TD.Id name))
     : Token _ (TD.DelimOpen Dl.SqBr)
@@ -188,9 +183,6 @@ statement tokens = case tokens of
     let (tokens', rest') = collectUntil TD.Semicolon tokens
         expression = expr tokens'
      in (Statement (Expr.crs expression) (SD.Expr expression), rest')
-
-foldTkCrs :: [Token] -> Cursor
-foldTkCrs = Cursor.fold . map Token.crs
 
 if_ :: Cursor -> [Token] -> (Statement, [Token])
 if_ cursor tokens =
@@ -217,7 +209,7 @@ case_ cursor tokens = case tokens of
       | otherwise -> (Statement (cursor |+| cursor') (SD.Invalid $ "Invalid type for case constant: " ++ show ty), rest)
   _ ->
     let (tks, rest) = collectUntil (TD.Op Op.Colon) tokens
-     in (Statement (cursor |+| foldTkCrs tks) (SD.Invalid $ "Invalid case constant: " ++ show tks), rest)
+     in (Statement (cursor |+| Token.foldCrs tks) (SD.Invalid $ "Invalid case constant: " ++ show tks), rest)
 
 while :: Cursor -> [Token] -> (Statement, [Token])
 while cursor tokens =
@@ -246,7 +238,7 @@ for cursor tokens =
    in ( Statement (cursor |+| St.crs body) $ case decl of
           Token _ (TD.Type ty) : Token _ (TD.Id name) : assign ->
             SD.ForVar
-              (varStatement (foldTkCrs tokens) ty name assign)
+              (varStatement (Token.foldCrs tokens) ty name assign)
               (expr <$> listToMaybeList cond)
               (expr <$> listToMaybeList incr)
               body
@@ -263,13 +255,13 @@ block :: Cursor -> [Token] -> (Statement, [Token])
 block cursor tokens =
   let (tokens', rest') = collectUntilDelimiter Dl.Br tokens
       sts = statementList tokens'
-   in (Statement (cursor |+| foldTkCrs tokens') (SD.Block sts), rest')
+   in (Statement (cursor |+| Token.foldCrs tokens') (SD.Block sts), rest')
 
 return_ :: Cursor -> [Token] -> (Statement, [Token])
 return_ cursor tokens =
   case collectUntil TD.Semicolon tokens of
     ([], rest') -> (Statement (cursor |+| Token.crs (head tokens)) (SD.Return Nothing), rest')
-    (tokens', rest') -> (Statement (cursor |+| foldTkCrs tokens') (SD.Return (Just (expr tokens'))), rest')
+    (tokens', rest') -> (Statement (cursor |+| Token.foldCrs tokens') (SD.Return (Just (expr tokens'))), rest')
 
 label :: Cursor -> Id -> [Token] -> (Statement, [Token])
 label cursor name tokens = case Token.filterNL tokens of
@@ -286,8 +278,8 @@ simpleStatement parser tokens =
 varStatement :: Cursor -> Type -> Id -> [Token] -> Statement
 varStatement cursor ty name tokens = case tokens of
   [] -> Statement cursor (SD.Var ty name Nothing)
-  Token _ (TD.Op Op.Assign) : tokens' -> Statement (cursor |+| foldTkCrs tokens) (SD.Var ty name (Just (expr tokens')))
-  _ -> Statement (cursor |+| foldTkCrs tokens) (SD.Invalid ("Invalid assignment : " ++ show tokens))
+  Token _ (TD.Op Op.Assign) : tokens' -> Statement (cursor |+| Token.foldCrs tokens) (SD.Var ty name (Just (expr tokens')))
+  _ -> Statement (cursor |+| Token.foldCrs tokens) (SD.Invalid ("Invalid assignment : " ++ show tokens))
 
 exprList :: [Token] -> [Expr]
 exprList tokens = case tokens of
@@ -322,7 +314,7 @@ expr tokens = case tokens of
   tks ->
     Expr cursor (ED.Invalid ("Invalid expression : " ++ show tks))
   where
-    cursor = foldTkCrs tokens
+    cursor = Token.foldCrs tokens
 
 exprNext :: Expr -> [Token] -> Expr
 exprNext ex tokens = case tokens of
@@ -333,7 +325,7 @@ exprNext ex tokens = case tokens of
   Token _ (TD.DelimOpen Dl.Pr) : tks -> Expr cursor (ED.Call ex (exprList (collectArguments tks)))
   _ -> Expr cursor (ED.Invalid ("Invalid follow expression for " ++ show ex ++ " : " ++ show tokens))
   where
-    cursor = foldTkCrs tokens
+    cursor = Token.foldCrs tokens
 
 collectArrayDecl :: [Token] -> [Token]
 collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Dl.Br tokens in tokens'
@@ -358,7 +350,7 @@ binop left op right = case right of
 
 collectParameters :: [Token] -> (Either (Cursor, [(Type, Id)]) String, [Token])
 collectParameters tokens = case tokens of
-  [] -> (Left (foldTkCrs tokens, []), [])
+  [] -> (Left (Token.foldCrs tokens, []), [])
   _ ->
     let (tokens', rest) = collectUntilDelimiter Dl.Pr tokens
      in (makeList tokens', rest)
@@ -366,7 +358,7 @@ collectParameters tokens = case tokens of
     from = Token.crs $ head tokens
     makeList :: [Token] -> Either (Cursor, [(Type, Id)]) String
     makeList tokens'' = case tokens'' of
-      [] -> Left (foldTkCrs tokens'', [])
+      [] -> Left (Token.foldCrs tokens'', [])
       Token _ (TD.Type ty) : Token to (TD.Id name) : Token _ (TD.Op Op.Comma) : rest -> next (from |+| to, (ty, name)) rest
       Token _ (TD.Type ty) : Token to (TD.Id name) : _ -> Left (from |+| to, [(ty, name)])
       _ -> Right ("Invalid parameters : " ++ show tokens'')

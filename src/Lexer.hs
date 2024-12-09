@@ -1,7 +1,7 @@
 module Lexer (Lexer.lex) where
 
 import CharClasses qualified as CC
-import Cursor (Cursor (..), (|+|))
+import Cursor (Cursor (..), CursorOps(..))
 import Cursor qualified
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -17,17 +17,17 @@ lex text = reduceTokens $ lexFrom text 0
 reduceTokens :: [Token] -> [Token]
 reduceTokens tokens = case tokens of
   [] -> []
-  Token crsL TD.NL
-    : Token crsR TD.NL
+  Token cl TD.NL
+    : Token cr TD.NL
     : rest ->
-      reduceTokens (Token (crsL |+| crsR) TD.NL : rest)
-  Token crsL (Token.Op Op.Lt)
+      reduceTokens (Token (cl |+| cr) TD.NL : rest)
+  Token cl (Token.Op Op.Lt)
     : Token _ (Token.Id (Id str))
     : Token _ (Token.Op Op.MemberPtr)
     : Token _ (Token.Id (Id str'))
-    : Token crsR (Token.Op Op.Gt)
+    : Token cr (Token.Op Op.Gt)
     : rest ->
-      reduceTokens (Token (crsL |+| crsR) (TD.ImplInclude (str ++ "." ++ str')) : rest)
+      reduceTokens (Token (cl |+| cr) (TD.ImplInclude (str ++ "." ++ str')) : rest)
   tk
     : rest ->
       tk : reduceTokens rest
