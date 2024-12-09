@@ -1,13 +1,11 @@
 module Parser (parse) where
 
 import Constant (Constant (..))
-import Constant qualified
-import Cursor (Cursor (Cursor), fold, (|+|))
-import Cursor qualified (Cursor (..))
+import Cursor (Cursor, fold, (|+|))
 import Data.List (intercalate)
-import Declaration (Declaration)
+import Declaration (Declaration (Declaration), DeclarationDef)
 import Declaration qualified (errs)
-import Declaration qualified as Decl (Declaration (..))
+import Declaration qualified as DD (DeclarationDef (..))
 import Delimiter qualified as Dl
 import Expr (Expr (Expr))
 import Expr qualified (Expr (..))
@@ -16,15 +14,14 @@ import Identifier (Id)
 import Op (Op)
 import Op qualified
 import Statement (Statement (Statement))
-import Statement qualified as St (Statement (..))
 import Statement qualified as SD (StatementDef (..))
+import Statement qualified as St (Statement (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, parseList)
 import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
 import Utils (listToMaybeList)
-import Debug.Trace (trace)
 
 parse :: [Token] -> [Declaration]
 parse tokens =
@@ -62,43 +59,43 @@ declarations :: [Token] -> [Declaration]
 declarations tokens = case tokens of
   [] -> []
   [Token _ TD.Eof] -> []
-  Token cl TD.Enum
+  Token cursor TD.Enum
     : Token _ (TD.Id name)
     : Token _ (TD.Op Op.Colon)
     : Token _ (TD.Type ty)
-    : Token cr (TD.DelimOpen Dl.Br)
+    : Token _ (TD.DelimOpen Dl.Br)
     : tks ->
-      put $ enum (Just name) ty tks
-  Token cl TD.Enum
+      put $ enum cursor (Just name) ty tks
+  Token cursor TD.Enum
     : Token _ (TD.Op Op.Colon)
     : Token _ (TD.Type ty)
-    : Token cr (TD.DelimOpen Dl.Br)
+    : Token _ (TD.DelimOpen Dl.Br)
     : tks ->
-      put $ enum Nothing ty tks
-  Token cl TD.Enum
+      put $ enum cursor Nothing ty tks
+  Token cursor TD.Enum
     : Token _ (TD.Id name)
-    : Token cr (TD.DelimOpen Dl.Br)
+    : Token _ (TD.DelimOpen Dl.Br)
     : tks ->
-      put $ enum (Just name) Ty.Int tks
-  Token cl TD.Enum
-    : Token cr (TD.DelimOpen Dl.Br)
+      put $ enum cursor (Just name) Ty.Int tks
+  Token cursor TD.Enum
+    : Token _ (TD.DelimOpen Dl.Br)
     : tks ->
-      put $ enum Nothing Ty.Int tks
-  Token cl (TD.Type (Ty.Struct name))
-    : Token cr (TD.DelimOpen Dl.Br)
+      put $ enum cursor Nothing Ty.Int tks
+  Token cursor (TD.Type (Ty.Struct name))
+    : Token _ (TD.DelimOpen Dl.Br)
     : tks ->
-      put $ struct name tks
-  Token cl (TD.Type ty)
+      put $ struct cursor name tks
+  Token cursor (TD.Type ty)
     : Token _ (TD.Id name)
-    : Token cr (TD.DelimOpen Dl.Pr)
+    : Token _ (TD.DelimOpen Dl.Pr)
     : tks ->
-      put $ func ty name tks
+      put $ func cursor ty name tks
   Token _ TD.NL
     : tks ->
       declarations tks
-  tk
+  Token cursor tkDef
     : tks ->
-      Decl.Invalid ("Unexpected token " ++ show tk) : declarations tks
+      Declaration cursor (DD.Invalid ("Unexpected token " ++ show tkDef)) : declarations tks
   where
     put :: (Declaration, [Token]) -> [Declaration]
     put tuple =
@@ -359,62 +356,64 @@ binop left op right = case right of
   where
     cl = Expr.crs left
 
-collectParameters :: [Token] -> (Either [(Type, Id)] String, [Token])
+collectParameters :: [Token] -> (Either (Cursor, [(Type, Id)]) String, [Token])
 collectParameters tokens = case tokens of
-  [] -> (Left [], [])
+  [] -> (Left (foldTkCrs tokens, []), [])
   _ ->
     let (tokens', rest) = collectUntilDelimiter Dl.Pr tokens
      in (makeList tokens', rest)
   where
-    makeList :: [Token] -> Either [(Type, Id)] String
+    from = Token.crs $ head tokens
+    makeList :: [Token] -> Either (Cursor, [(Type, Id)]) String
     makeList tokens'' = case tokens'' of
-      [] -> Left []
-      Token _ (TD.Type ty) : Token _ (TD.Id name) : Token _ (TD.Op Op.Comma) : rest -> next (ty, name) rest
-      Token _ (TD.Type ty) : Token _ (TD.Id name) : _ -> Left [(ty, name)]
+      [] -> Left (foldTkCrs tokens'', [])
+      Token _ (TD.Type ty) : Token to (TD.Id name) : Token _ (TD.Op Op.Comma) : rest -> next (from |+| to, (ty, name)) rest
+      Token _ (TD.Type ty) : Token to (TD.Id name) : _ -> Left (from |+| to, [(ty, name)])
       _ -> Right ("Invalid parameters : " ++ show tokens'')
       where
-        next el tks = case makeList tks of
-          Left els -> Left (el : els)
+        next :: (Cursor, (Type, Id)) -> [Token] -> Either (Cursor, [(Type, Id)]) String
+        next (cursor, param) tks = case makeList tks of
+          Left (cursor', params) -> Left (cursor |+| cursor', param : params)
           Right err -> Right err
 
-func :: Type -> Id -> [Token] -> (Declaration, [Token])
-func ty name tokens =
+func :: Cursor -> Type -> Id -> [Token] -> (Declaration, [Token])
+func cursor ty name tokens =
   case rest of
     Token _ TD.Semicolon : rest' ->
       case mparameters of
-        Left parameters -> (funcDef ty name parameters, rest')
-        Right err -> (Decl.Invalid err, rest')
+        Left (cursor', parameters) -> (Declaration (cursor |+| cursor') (funcDef ty name parameters), rest')
+        Right err -> (Declaration cursor (DD.Invalid err), rest')
     Token _ (TD.DelimOpen Dl.Br) : rest' ->
       let (body, rest'') = collectFuncBody rest'
        in case mparameters of
-            Left parameters ->
-              (funcDec ty name parameters body, rest'')
-            Right err -> (Decl.Invalid err, rest'')
-    _ -> (Decl.Invalid "Expected ; or {", rest)
+            Left (cursor', parameters) ->
+              (Declaration (cursor |+| cursor') (funcDec ty name parameters body), rest'')
+            Right err -> (Declaration cursor (DD.Invalid err), rest'')
+    _ -> (Declaration cursor (DD.Invalid "Expected ; or {"), rest)
   where
     (mparameters, rest) = collectParameters tokens
 
-funcDef :: Type -> Id -> [(Type, Id)] -> Declaration
-funcDef = Decl.FuncDef
+funcDef :: Type -> Id -> [(Type, Id)] -> DeclarationDef
+funcDef = DD.FuncDef
 
 collectFuncBody :: [Token] -> ([Token], [Token])
 collectFuncBody = collectUntilDelimiter Dl.Br
 
-funcDec :: Type -> Id -> [(Type, Id)] -> [Token] -> Declaration
-funcDec ty name params body = Decl.FuncDec ty name params (statementList body)
+funcDec :: Type -> Id -> [(Type, Id)] -> [Token] -> DeclarationDef
+funcDec ty name params body = DD.FuncDec ty name params (statementList body)
 
 collectStructFields :: [Token] -> ([Token], [Token])
 collectStructFields = collectUntilDelimiter Dl.Br
 
-struct :: Maybe Id -> [Token] -> (Declaration, [Token])
-struct name tokens =
+struct :: Cursor -> Maybe Id -> [Token] -> (Declaration, [Token])
+struct cursor name tokens =
   let (tokens', rest') = collectStructFields tokens
    in case rest' of
         Token _ TD.Semicolon : rest'' -> case structFields tokens' of
-          Left fields -> (Decl.Struct name fields, rest'')
-          Right err -> (Decl.Invalid err, rest'')
-        tk : rest'' -> (Decl.Invalid ("Expected semicolon, got " ++ show tk), rest'')
-        [] -> (Decl.Invalid "Expected semicolon", rest')
+          Left fields -> (Declaration cursor (DD.Struct name fields), rest'')
+          Right err -> (Declaration cursor (DD.Invalid err), rest'')
+        tk : rest'' -> (Declaration cursor (DD.Invalid ("Expected semicolon, got " ++ show tk)), rest'')
+        [] -> (Declaration cursor (DD.Invalid "Expected semicolon"), rest')
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = case Token.filterNL tokens of
@@ -430,15 +429,15 @@ structFields tokens = case Token.filterNL tokens of
       Left fields -> Left (field : fields)
       Right err -> Right err
 
-enum :: Maybe Id -> Type -> [Token] -> (Declaration, [Token])
-enum name ty tokens =
+enum :: Cursor -> Maybe Id -> Type -> [Token] -> (Declaration, [Token])
+enum cursor name ty tokens =
   let (tokens', rest') = collectEnumVariants tokens
    in case rest' of
         Token _ TD.Semicolon : rest'' -> case enumVariants tokens' of
-          Left variants -> (Decl.Enum name ty variants, rest'')
-          Right err -> (Decl.Invalid err, rest'')
-        tk : rest'' -> (Decl.Invalid ("Expected semicolon, got " ++ show tk), rest'')
-        [] -> (Decl.Invalid "Expected semicolon", rest')
+          Left variants -> (Declaration cursor (DD.Enum name ty variants), rest'')
+          Right err -> (Declaration cursor (DD.Invalid err), rest'')
+        tk : rest'' -> (Declaration cursor (DD.Invalid ("Expected semicolon, got " ++ show tk)), rest'')
+        [] -> (Declaration cursor (DD.Invalid "Expected semicolon"), rest')
 
 collectEnumVariants :: [Token] -> ([Token], [Token])
 collectEnumVariants = collectUntilDelimiter Dl.Br
