@@ -77,7 +77,8 @@ executable compiler
         Expr,
         Utils,
         Preprocessor,
-        Delimiter
+        Delimiter,
+        Validator
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

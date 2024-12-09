@@ -2,6 +2,7 @@ import Declaration (Declaration)
 import Parser qualified (parse)
 import Preprocessor qualified (process)
 import System.Environment (getArgs)
+import Validator (validate)
 
 main :: IO ()
 main = do
@@ -16,4 +17,6 @@ compileFile filePath = do
   let topLevel = Parser.parse tokens
   putStrLn $ "Parser " ++ filePath ++ " :"
   print topLevel
-  return topLevel
+  if validate topLevel
+    then return topLevel
+    else error "Invalid program"
