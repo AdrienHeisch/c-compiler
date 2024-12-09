@@ -1,7 +1,8 @@
-module Token (Token (..), Delimiter (..), make, filterNil, filterNL, toStr) where
+module Token (Token (..), TokenDef (..), Delimiter (..), makeDef, filterNil, filterNL, toStr) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
+import Cursor (Cursor)
 import Data.Char (ord, toLower)
 import Delimiter (Delimiter)
 import Delimiter qualified
@@ -12,7 +13,25 @@ import Op qualified
 import Type (Type)
 import Type qualified
 
-data Token
+data Token = Token {crs :: Cursor, def :: TokenDef}
+  -- deriving (Show)
+
+instance Show Token where
+  show :: Token -> String
+  show = show . def
+  
+
+-- mkCrs :: [Token] -> Int -> Cursor
+-- mkCrs tokens n = combine (crs $ head tokens) (crs $ tokens !! (n + 1))
+
+-- mkCrs n tks = foldl combine (head crss) (take (n - 1) $ tail crss)
+--   where crss = map crs tks
+-- mkCrs _ 0 = error "Can't take 0 token !"
+-- mkCrs [] _ = error "No token to take !"
+-- mkCrs (tk : _) 1 = crs tk
+-- mkCrs (tk : tks) n = crs tk `combine` mkCrs tks (n - 1)
+
+data TokenDef
   = Type Type
   | Signed
   | Unsigned
@@ -48,10 +67,11 @@ data Token
   | NL
   | Nil
   | Eof
+  | Invalid String
   deriving (Show, Eq)
 
-make :: String -> Token
-make str = case str of
+makeDef :: String -> TokenDef
+makeDef str = case str of
   ";" -> Semicolon
   "void" -> Type Type.Void
   "bool" -> Type Type.Bool
@@ -161,13 +181,13 @@ make str = case str of
   ('#' : directive) | isIdentifier directive -> Directive directive
   "#" -> Stringize
   "##" -> TokenPaste
-  _ -> error ("Unexpected character sequence \"" ++ str ++ "\"")
+  _ -> Invalid ("Unexpected character sequence \"" ++ str ++ "\"")
 
 filterNil :: [Token] -> [Token]
-filterNil = filter (/= Token.Nil)
+filterNil = filter ((/= Nil) . def)
 
 filterNL :: [Token] -> [Token]
-filterNL = filter (/= Token.NL)
+filterNL = filter ((/= NL) . def)
 
 keywordUnimplErr :: String -> a
 keywordUnimplErr keyword = error ("Unimplemented keyword : " ++ keyword)
@@ -214,7 +234,7 @@ isNewLine ('\n' : cs) = isNewLine cs
 isNewLine _ = False
 
 toStr :: Token -> String
-toStr token = case token of 
+toStr token = case def token of
   Type ty -> Type.toStr ty
   Op op -> Op.toStr op
   Id name -> Identifier.toStr name
@@ -229,4 +249,4 @@ toStr token = case token of
   NL -> "\n"
   Nil -> " "
   Eof -> ""
-  _ -> map toLower $ show token
+  tkDef -> map toLower $ show tkDef

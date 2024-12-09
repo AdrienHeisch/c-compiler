@@ -1,22 +1,40 @@
 module Preprocessor (process) where
 
 import Constant (Constant (..))
+import Cursor (Cursor, (|+|))
+import Cursor qualified
+import Data.List (intercalate)
 import Data.Text.IO qualified as TIO
 import Delimiter qualified as Dl
 import Identifier (Id (..))
 import Lexer qualified
 import Op qualified
 import System.FilePath (combine, normalise, takeDirectory)
-import Token (Token)
+import Token (Token (..))
 import Token qualified (filterNil, toStr)
-import Token qualified as Tk (Token (..))
+import Token qualified as TD (TokenDef (..))
 import Type qualified as Ty (Type (..))
 import Utils (collectUntil, collectUntilDelimiter)
 
 data Directive
   = Include Bool String
   | Define Id [Id] [Token]
+  | Invalid String
   deriving (Show)
+
+errInvalidTokens :: [Token] -> String
+errInvalidTokens tokens = intercalate "\n" $ map show $ filter isInvalid tokens
+  where
+    isInvalid :: Token -> Bool
+    isInvalid (Token _ (TD.Invalid _)) = True
+    isInvalid _ = False
+
+errInvalidDirectives :: [Directive] -> String
+errInvalidDirectives directives = intercalate "\n" $ map show $ filter isInvalid directives
+  where
+    isInvalid :: Directive -> Bool
+    isInvalid (Invalid _) = True
+    isInvalid _ = False
 
 process :: FilePath -> IO [Token]
 process filePath = do
@@ -29,21 +47,25 @@ addFile :: FilePath -> IO ([Directive], [Token])
 addFile filePath = do
   source <- TIO.readFile filePath
   let tokens = Lexer.lex source
+      !_ = case errInvalidTokens tokens of
+        [] -> []
+        errs -> error $ "Lexer errors :\n" ++ errs
       (directives, rest) = parseDirectives [] tokens
+      !_ = case errInvalidDirectives directives of
+        [] -> []
+        errs -> error $ "Preprocessor errors :\n" ++ errs
   return (directives, rest)
 
 -- TODO force directive at fist position of line
 parseDirectives :: [Directive] -> [Token] -> ([Directive], [Token])
 parseDirectives directives tokens = case tokens of
   [] -> (directives, [])
-  ( Tk.Directive name
-      : tks
-    ) ->
-      let (tks', rest) = collectDirective tks
-       in next rest $ case name of
-            "include" -> parseInclude tks'
-            "define" -> parseDefine tks'
-            _ -> error $ "Unknown directive #" ++ name
+  Token cursor (TD.Directive name) : tks ->
+    let (tks', rest) = collectDirective tks
+     in next rest $ case name of
+          "include" -> parseInclude tks'
+          "define" -> parseDefine tks'
+          _ -> Invalid $ "Unknown directive #" ++ name ++ " at " ++ show cursor
   (tk : tks) ->
     let (directives', rest) = parseDirectives directives tks
      in (directives', tk : rest)
@@ -53,13 +75,14 @@ parseDirectives directives tokens = case tokens of
        in (directive : directives', rest')
 
 collectDirective :: [Token] -> ([Token], [Token])
-collectDirective = collectUntil Tk.NL
+collectDirective = collectUntil TD.NL
 
 cleanupTemplate :: [Token] -> [Token]
 cleanupTemplate tokens = case tokens of
   [] -> []
-  (Tk.Directive name : tks) -> Tk.Stringize : Tk.Id (Id name) : cleanupTemplate tks
-  (tk : tks) -> tk : cleanupTemplate tks
+  Token crs (TD.Directive name) : tks ->
+    Token (Cursor.head crs) TD.Stringize : Token (Cursor.tail crs) (TD.Id (Id name)) : cleanupTemplate tks
+  tk : tks -> tk : cleanupTemplate tks
 
 applyDirectives :: FilePath -> [Directive] -> [Token] -> IO [Token]
 applyDirectives sourcePath directives tokens = case directives of
@@ -73,29 +96,35 @@ applyDirective sourcePath directive tokens = case directive of
   Include True _ -> error "Standard library not implemented"
   Include False fileName -> applyInclude sourcePath fileName tokens
   Define name params template -> return (applyDefine name params template tokens)
+  Invalid _ -> error $ "Invalid directive shouldn't be applied : " ++ show directive
 
 parseInclude :: [Token] -> Directive
-parseInclude tokens = case tokens of
-  [Tk.Nil, Tk.ImplInclude fileName] -> Include True fileName
-  [Tk.Nil, Tk.StrLiteral (Constant _ fileName)] -> Include False fileName
-  _ -> error "Invalid include"
+parseInclude tokens = case map def tokens of
+  [TD.Nil, TD.ImplInclude fileName] -> Include True fileName
+  [TD.Nil, TD.StrLiteral (Constant _ fileName)] -> Include False fileName
+  _ -> Invalid "Invalid include"
 
 parseDefine :: [Token] -> Directive
-parseDefine tokens = case tokens of
-  (Tk.Nil : Tk.Id name : Tk.DelimOpen Dl.Pr : rest) ->
-    let (params, rest') = collectDefineParams rest
-     in Define name params (cleanupTemplate rest')
-  (Tk.Nil : Tk.Id name : Tk.Nil : rest) -> Define name [] rest
-  _ -> error "Define directive expected name"
+parseDefine tokens = case map def tokens of
+  TD.Nil : TD.Id name : TD.DelimOpen Dl.Pr : _ ->
+    case collectDefineParams (drop 3 tokens) of
+      Left (params, rest') -> Define name params (cleanupTemplate rest')
+      Right err -> Invalid err
+  TD.Nil : TD.Id name : TD.Nil : _ -> Define name [] (drop 3 tokens)
+  _ -> Invalid "Define directive expected name"
 
-collectDefineParams :: [Token] -> ([Id], [Token])
-collectDefineParams tokens = case Token.filterNil tokens of
-  [] -> ([], [])
-  (Tk.Id name : Tk.DelimClose Dl.Pr : tks) -> ([name], tks)
-  (Tk.Id name : Tk.Op Op.Comma : tks) ->
-    let (names, rest) = collectDefineParams tks
-     in (name : names, rest)
-  (tk : _) -> error $ "Expected identifier, got : " ++ show tk
+collectDefineParams :: [Token] -> Either ([Id], [Token]) String
+collectDefineParams tokens = case map def filtered of
+  [] -> Left ([], [])
+  TD.Id name : TD.DelimClose Dl.Pr : _ -> Left ([name], drop 2 filtered)
+  TD.Id name : TD.Op Op.Comma : _ ->
+    case collectDefineParams (drop 2 filtered) of
+      Left (names, rest) -> Left (name : names, rest)
+      Right err -> Right err
+  TD.Id _ : tk : _ -> Right $ "Expected , or ) but got : " ++ show tk ++ " at " ++ show (crs $ filtered !! 1)
+  tk : _ -> Right $ "Expected identifier, got : " ++ show tk ++ " at " ++ show (crs $ head filtered)
+  where
+    filtered = Token.filterNil tokens
 
 applyInclude :: FilePath -> FilePath -> [Token] -> IO [Token]
 applyInclude source include tokens = do
@@ -110,16 +139,18 @@ applyDefine :: Id -> [Id] -> [Token] -> [Token] -> [Token]
 applyDefine name params template = apply
   where
     apply :: [Token] -> [Token]
-    apply tokens = case tokens of
+    apply tokens = case map def tokens of
       [] -> []
-      (Tk.Id name_ : Tk.DelimOpen Dl.Pr : tks)
+      TD.Id name_ : TD.DelimOpen Dl.Pr : _
         | name == name_ ->
-            let (args, rest) = collectArgs tks
+            let (args, rest) = collectArgs (drop 2 tokens)
                 replacement = applyArgs args template
              in replacement ++ applyDefine name params template rest
-      (Tk.Id name_ : tks)
-        | name == name_ -> template ++ applyDefine name params template tks
-      (tk : tks) -> tk : applyDefine name params template tks
+      TD.Id name_ : _
+        | name == name_ ->
+            template ++ applyDefine name params template (tail tokens)
+      _ : _ ->
+        head tokens : applyDefine name params template (tail tokens)
 
     applyArgs :: [[Token]] -> [Token] -> [Token]
     applyArgs args tokens
@@ -146,22 +177,29 @@ applyDefine name params template = apply
     applyArg param arg = go
       where
         go :: [Token] -> [Token]
-        go tokens = case tokens of
+        go tokens = case map def tokens of
           [] -> []
-          (Tk.Stringize : Tk.Id param_ : tks) | param == param_ -> stringize arg : go tks
-          (Tk.Id param_ : tks) | param == param_ -> arg ++ go tks
-          (tk : tks) -> tk : go tks
+          TD.Stringize : TD.Id param_ : _
+            | param == param_ ->
+                stringize arg : go (drop 2 tokens)
+          TD.Id param_ : _
+            | param == param_ ->
+                arg ++ go (tail tokens)
+          _ : _ -> head tokens : go (tail tokens)
 
     stringize :: [Token] -> Token
-    stringize arg = Tk.StrLiteral $ Constant (Ty.Array Ty.Char $ length str) str
+    stringize arg = Token cursor (TD.StrLiteral (Constant (Ty.Array Ty.Char $ length str) str))
       where
+        cursor :: Cursor
+        cursor = Token.crs (head arg) |+| Token.crs (last arg)
+
         str :: String
         str = toStr arg
 
         toStr :: [Token] -> String
         toStr tokens = case tokens of
           [] -> ""
-          (tk : tks) -> Token.toStr tk ++ toStr tks
+          tk : tks -> Token.toStr tk ++ toStr tks
 
     collectArgs :: [Token] -> ([[Token]], [Token])
     collectArgs = go
@@ -178,15 +216,16 @@ applyDefine name params template = apply
 
         -- TODO move to utils and replace in other occurences
         collectOne :: [Token] -> ([Token], [Token])
-        collectOne tokens = case tokens of
+        collectOne tokens = case map def tokens of
           [] -> ([], [])
-          (Tk.Op Op.Comma : tks) -> collectOne tks
-          _ -> collectUntil (Tk.Op Op.Comma) tokens
+          TD.Op Op.Comma : _ -> collectOne (tail tokens)
+          _ -> collectUntil (TD.Op Op.Comma) tokens
 
         trim :: [Token] -> [Token]
         trim = reverse . go' . reverse . go'
           where
-            go' tokens = case tokens of
-              (Tk.Nil : tks) -> go' tks
-              (Tk.NL : tks) -> go' tks
+            go' :: [Token] -> [Token]
+            go' tokens = case map def tokens of
+              TD.Nil : _ -> go' $ tail tokens
+              TD.NL : _ -> go' $ tail tokens
               _ -> tokens

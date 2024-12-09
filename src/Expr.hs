@@ -1,8 +1,8 @@
 module Expr (Expr (..)) where
 
+import Constant (Constant, FltRepr, IntRepr, StrRepr)
 import Identifier (Id)
 import Op (Op)
-import Constant (Constant, IntRepr, FltRepr, StrRepr)
 
 data Expr
   = Id Id

@@ -1,9 +1,9 @@
 // #include <stdio.h>
-#include "dir/add.h"
+// #include "dir/add.h"
 // #define X 5
-#define STR(x) #x
-#define PRINTSTR(x) printf("%s", # x)
-// #define PRINTSTR(x, y) printf("%s %s", #x, #y)
+// #define STR(x) #x
+// #define PRINTSTR(x) printf("%s", # x)
+#define PRINTSTR(x, y) printf("%s %s", #x, #y)
 // #define VAR(a, b) a ## b
 
 /* enum Days : short {
@@ -17,11 +17,11 @@
 int main() {
     // char s = X;
     // char day = Tue;
-    // char a = 'a';
+    // char a = STR(a);
     // int l = X;
     // PRINTSTR(  hello    world  );
-    // PRINTSTR(hello , world );
+    PRINTSTR(hello , world );
     // int VAR(a, 1) = 5;
-    int a = ADD(5, 7);
+    // int a = ADD(5, 7);
     return 0;
 }

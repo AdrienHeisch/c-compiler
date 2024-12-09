@@ -9,7 +9,7 @@ main = do
   args <- getArgs
   mapM_ compileFile args
 
-compileFile :: FilePath -> IO [Declaration]
+compileFile :: FilePath -> IO () -- [Declaration]
 compileFile filePath = do
   tokens <- Preprocessor.process filePath
   putStrLn $ "Preprocessor " ++ filePath ++ " :"
@@ -17,6 +17,6 @@ compileFile filePath = do
   let topLevel = Parser.parse tokens
   putStrLn $ "Parser " ++ filePath ++ " :"
   print topLevel
-  if validate topLevel
-    then return topLevel
-    else error "Invalid program"
+  -- if validate topLevel
+  --   then return topLevel
+  --   else error "Invalid program"

@@ -1,13 +1,14 @@
 module Lexer (Lexer.lex) where
 
 import CharClasses qualified as CC
-import Cursor (Cursor (..))
+import Cursor (Cursor (..), (|+|))
 import Cursor qualified
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Identifier (Id (Id))
 import Op qualified
-import Token (Token)
+import Token (Token(..))
+import Token qualified as TD (TokenDef(..))
 import Token qualified
 
 lex :: Text -> [Token]
@@ -16,26 +17,37 @@ lex text = reduceTokens $ lexFrom text 0
 reduceTokens :: [Token] -> [Token]
 reduceTokens tokens = case tokens of
   [] -> []
-  (Token.NL : Token.NL : rest) -> reduceTokens (Token.NL : rest)
-  (Token.Op Op.Lt : Token.Id (Id str) : Token.Op Op.MemberPtr : Token.Id (Id str') : Token.Op Op.Gt : rest) ->
-    reduceTokens (Token.ImplInclude (str ++ "." ++ str') : rest)
-  (tk : rest) -> tk : reduceTokens rest
+  Token crsL TD.NL
+    : Token crsR TD.NL
+    : rest ->
+      reduceTokens (Token (crsL |+| crsR) TD.NL : rest)
+  Token crsL (Token.Op Op.Lt)
+    : Token _ (Token.Id (Id str))
+    : Token _ (Token.Op Op.MemberPtr)
+    : Token _ (Token.Id (Id str'))
+    : Token crsR (Token.Op Op.Gt)
+    : rest ->
+      reduceTokens (Token (crsL |+| crsR) (TD.ImplInclude (str ++ "." ++ str')) : rest)
+  tk
+    : rest ->
+      tk : reduceTokens rest
 
 lexFrom :: Text -> Int -> [Token]
-lexFrom text from = case takeToken text from of
-  (Token.Eof, _) -> []
-  -- (Token.Nil, from') -> lexFrom text from'
-  (token, from') -> token : lexFrom text from'
+lexFrom text from = case def token of
+  Token.Eof -> []
+  _ -> token : lexFrom text from'
+  where
+    (token, from') = takeToken text from
 
 takeToken :: Text -> Int -> (Token, Int)
 takeToken text from
-  | from >= Text.length text = (Token.Eof, from)
+  | from >= Text.length text = (Token (Cursor from 0) Token.Eof, from)
   | otherwise =
       let cursor = getCursor text from
        in case readCursor text cursor of
-            "//" -> (Token.Nil, skipLine text (Cursor.end cursor))
-            "/*" -> (Token.Nil, skipBlock text (Cursor.end cursor))
-            str -> (Token.make str, Cursor.end cursor)
+            "//" -> (Token cursor Token.Nil, skipLine text (Cursor.end cursor))
+            "/*" -> (Token cursor Token.Nil, skipBlock text (Cursor.end cursor))
+            str -> (Token cursor (Token.makeDef str), Cursor.end cursor)
 
 getCursor :: Text -> Int -> Cursor
 getCursor text idx = go (Cursor idx 1)
