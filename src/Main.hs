@@ -2,7 +2,6 @@ import Declaration (Declaration)
 import Parser qualified (parse)
 import Preprocessor qualified (process)
 import System.Environment (getArgs)
-import Token (Token)
 
 main :: IO ()
 main = do
@@ -11,15 +10,10 @@ main = do
 
 compileFile :: FilePath -> IO [Declaration]
 compileFile filePath = do
-  tokens <- addFile filePath
+  tokens <- Preprocessor.process filePath
+  putStrLn $ "Preprocessor " ++ filePath ++ " :"
+  print tokens
   let topLevel = Parser.parse tokens
   putStrLn $ "Parser " ++ filePath ++ " :"
   print topLevel
   return topLevel
-
-addFile :: FilePath -> IO [Token]
-addFile filePath = do
-  tokens <- Preprocessor.process filePath
-  putStrLn $ "Preprocessor " ++ filePath ++ " :"
-  print tokens
-  return tokens
