@@ -17,10 +17,13 @@ tail (Cursor idx len) = Cursor (idx Prelude.+ 1) (len - 1)
 
 fold :: [Cursor] -> Cursor
 fold cursors = go (Prelude.head cursors) (Prelude.tail cursors)
-    where
-        go :: Cursor -> [Cursor] -> Cursor
-        go cursor [] = cursor
-        go cursor (next : others) = cursor |+| go next others
+  where
+    go :: Cursor -> [Cursor] -> Cursor
+    go cursor [] = cursor
+    go cursor (next : others) = cursor |+| go next others
 
 (|+|) :: Cursor -> Cursor -> Cursor
-Cursor idxL _ |+| Cursor _ lenR = Cursor idxL lenR
+left |+| right = Cursor from to
+  where
+    from = idx left
+    to = end right - from

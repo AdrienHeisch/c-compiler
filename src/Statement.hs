@@ -1,12 +1,16 @@
-module Statement (Statement (..), errs) where
+module Statement (Statement (..), StatementDef (..), errs) where
 
 import Constant (Constant, IntRepr)
+import Cursor (Cursor)
 import Expr (Expr)
 import Expr qualified (errs)
 import Identifier (Id)
 import Type (Type (..))
 
-data Statement
+data Statement = Statement {crs :: Cursor, def :: StatementDef}
+  deriving (Show)
+
+data StatementDef
   = Empty
   | Expr Expr
   | Var Type Id (Maybe Expr)
@@ -30,7 +34,7 @@ errs :: [Statement] -> [String]
 errs = concatMap err
   where
     err :: Statement -> [String]
-    err statement = case statement of
+    err statement = case def statement of
       Expr e -> Expr.errs [e]
       Var _ _ (Just e) -> Expr.errs [e]
       If e st0 (Just st1) -> Expr.errs [e] ++ errs [st0, st1]
