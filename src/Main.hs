@@ -3,6 +3,7 @@ import Parser qualified (parse)
 import Preprocessor qualified (process)
 import System.Environment (getArgs)
 import Validator (validate)
+import Utils (Display(..))
 
 main :: IO ()
 main = do
@@ -13,10 +14,10 @@ compileFile :: FilePath -> IO [Declaration]
 compileFile filePath = do
   tokens <- Preprocessor.process filePath
   putStrLn $ "Preprocessor " ++ filePath ++ " :"
-  print tokens
+  putStrLn $ display tokens
   let topLevel = Parser.parse tokens
   putStrLn $ "Parser " ++ filePath ++ " :"
-  print topLevel
+  putStrLn $ display topLevel
   if validate topLevel
     then return topLevel
     else error "Invalid program"

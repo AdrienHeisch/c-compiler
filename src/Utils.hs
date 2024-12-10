@@ -9,3 +9,20 @@ listToMaybeList xs = Just xs
 
 mapFst :: (t -> a) -> (t, b) -> (a, b)
 mapFst f (a, b) = (f a, b)
+
+withSplit :: [a] -> ([a] -> [a] -> t) -> Int -> t
+withSplit l f n = let (tk, dp) = splitAt n l in f tk dp
+
+withSplitTpl :: [a] -> ([a] -> t) -> Int -> (t, [a])
+withSplitTpl l f n = let (tk, dp) = splitAt n l in (f tk, dp)
+
+class Display a where
+    display :: a -> String
+
+instance Display a => Display [a] where
+  display :: [a] -> String
+  display l = "[" ++ go l ++ "]"
+    where
+      go [] = ""
+      go [x] = display x
+      go (x : xs) = display x ++ ", " ++ go xs

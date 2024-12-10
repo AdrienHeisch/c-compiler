@@ -1,14 +1,20 @@
 module Statement (Statement (..), StatementDef (..), errs) where
 
 import Constant (Constant, IntRepr)
-import Cursor (Cursor)
 import Expr (Expr)
 import Expr qualified (errs)
 import Identifier (Id)
+import Token (Token, foldCrs)
 import Type (Type (..))
+import Utils (Display (..))
 
-data Statement = Statement {crs :: Cursor, def :: StatementDef}
+-- TODO change order
+data Statement = Statement {def :: StatementDef, tks :: [Token]}
   deriving (Show)
+
+instance Display Statement where
+  display :: Statement -> String
+  display = show . def
 
 data StatementDef
   = Empty
@@ -45,5 +51,5 @@ errs = concatMap err
       ForVar st0 (Just e0) (Just e1) st1 -> Expr.errs [e0, e1, e1] ++ errs [st0, st1]
       Return (Just e) -> Expr.errs [e]
       Block block -> concatMap err block
-      Invalid str -> [str ++ " at " ++ show (crs statement)]
+      Invalid str -> [str ++ " at " ++ show (Token.foldCrs $ tks statement)]
       _ -> []

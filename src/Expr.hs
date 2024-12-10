@@ -1,18 +1,22 @@
 module Expr (Expr (..), ExprDef (..), errs) where
 
 import Constant (Constant, FltRepr, IntRepr, StrRepr)
-import Cursor (Cursor)
 import Identifier (Id)
 import Op (Op)
-import Utils (genErrs)
+import Utils (genErrs, Display (..))
+import Token (Token)
 
-data Expr = Expr {crs :: Cursor, def :: ExprDef}
+data Expr = Expr {def :: ExprDef, tks :: [Token]}
   deriving (Show)
+
+instance Display Expr where
+  display :: Expr -> String
+  display = show . def
 
 errs :: [Expr] -> [String]
 errs = genErrs isInvalid
   where
-    isInvalid (Expr _ (Invalid _)) = True
+    isInvalid (Expr (Invalid _) _)  = True
     isInvalid _ = False
 
 data ExprDef

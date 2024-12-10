@@ -1,14 +1,19 @@
 module Declaration (Declaration (..), DeclarationDef (..), errs) where
 
-import Cursor (Cursor)
 import Expr (Expr)
 import Identifier (Id)
 import Statement (Statement)
 import Statement qualified (errs)
 import Type (Type (..))
+import Token (Token, foldCrs)
+import Utils (Display (..))
 
-data Declaration = Declaration {crs :: Cursor, def :: DeclarationDef}
+data Declaration = Declaration {def :: DeclarationDef, tks :: [Token]}
   deriving (Show)
+
+instance Display Declaration where
+  display :: Declaration -> String
+  display = show . def
 
 data DeclarationDef
   = FuncDef Type Id [(Type, Id)]
@@ -28,5 +33,5 @@ errs = concatMap err
     err decl = case def decl of
       FuncDec _ _ _ sts -> Statement.errs sts
       -- Enum _ _ [(Id, Maybe Expr)] -> []
-      Invalid str -> [str ++ " at " ++ show (crs decl)]
+      Invalid str -> [str ++ " at " ++ show (Token.foldCrs $ tks decl)]
       _ -> []

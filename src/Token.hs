@@ -1,4 +1,4 @@
-module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef, filterNil, filterNL, defToStr, collectUntil, collectUntilDelimiter, parseList) where
+module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef, defToStr, filterNil, filterNL, collectUntil, collectUntilDelimiter, parseList) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
@@ -12,14 +12,14 @@ import Op (Op)
 import Op qualified
 import Type (Type)
 import Type qualified
-import Utils (genErrs)
+import Utils (genErrs, Display (..))
 
 data Token = Token {crs :: Cursor, def :: TokenDef}
   deriving (Show)
 
--- instance Show Token where
---   show :: Token -> String
---   show token = (toStr . def) token ++ " at " ++ (show . crs) token
+instance Display Token where
+  display :: Token -> String
+  display token = (show . def) token ++ " at " ++ (show . crs) token
 
 errs :: [Token] -> [String]
 errs = genErrs isInvalid
