@@ -17,17 +17,17 @@ lex text = reduceTokens $ lexFrom text 0
 reduceTokens :: [Token] -> [Token]
 reduceTokens tokens = case tokens of
   [] -> []
-  Token cl TD.NL
-    : Token cr TD.NL
+  Token TD.NL cl
+    : Token TD.NL cr
     : rest ->
-      reduceTokens (Token (cl |+| cr) TD.NL : rest)
-  Token cl (Token.Op Op.Lt)
-    : Token _ (Token.Id (Id str))
-    : Token _ (Token.Op Op.MemberPtr)
-    : Token _ (Token.Id (Id str'))
-    : Token cr (Token.Op Op.Gt)
+      reduceTokens (Token TD.NL (cl |+| cr) : rest)
+  Token (Token.Op Op.Lt) cl
+    : Token (Token.Id (Id str)) _
+    : Token (Token.Op Op.MemberPtr) _
+    : Token (Token.Id (Id str')) _
+    : Token (Token.Op Op.Gt) cr
     : rest ->
-      reduceTokens (Token (cl |+| cr) (TD.ImplInclude (str ++ "." ++ str')) : rest)
+      reduceTokens (Token (TD.ImplInclude (str ++ "." ++ str')) (cl |+| cr) : rest)
   tk
     : rest ->
       tk : reduceTokens rest
@@ -41,13 +41,13 @@ lexFrom text from = case def token of
 
 takeToken :: Text -> Int -> (Token, Int)
 takeToken text from
-  | from >= Text.length text = (Token (Cursor from 0) Token.Eof, from)
+  | from >= Text.length text = (Token Token.Eof (Cursor from 0), from)
   | otherwise =
       let cursor = getCursor text from
        in case readCursor text cursor of
-            "//" -> (Token cursor Token.Nil, skipLine text (Cursor.end cursor))
-            "/*" -> (Token cursor Token.Nil, skipBlock text (Cursor.end cursor))
-            str -> (Token cursor (Token.makeDef str), Cursor.end cursor)
+            "//" -> (Token Token.Nil cursor, skipLine text (Cursor.end cursor))
+            "/*" -> (Token Token.Nil cursor, skipBlock text (Cursor.end cursor))
+            str -> (Token (Token.makeDef str) cursor, Cursor.end cursor)
 
 getCursor :: Text -> Int -> Cursor
 getCursor text idx = go (Cursor idx 1)

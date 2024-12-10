@@ -26,3 +26,10 @@ instance Display a => Display [a] where
       go [] = ""
       go [x] = display x
       go (x : xs) = display x ++ ", " ++ go xs
+
+instance Display a => Display (Maybe a) where
+  display :: Maybe a -> String
+  display m = "[" ++ go m ++ "]"
+    where
+      go Nothing = "_"
+      go (Just a) = display a

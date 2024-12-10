@@ -34,25 +34,25 @@ parse tokens =
 static :: [Token] -> [Token]
 static tokens = case tokens of
   [] -> []
-  Token cl TD.Signed
-    : Token cr (TD.Type ty)
+  Token TD.Signed cl
+    : Token (TD.Type ty) cr
     : tks ->
-      static (Token (cl |+| cr) (TD.Type (Ty.signed ty)) : tks)
-  Token cl TD.Unsigned
-    : Token cr (TD.Type ty)
+      static (Token (TD.Type (Ty.signed ty)) (cl |+| cr) : tks)
+  Token TD.Unsigned cl
+    : Token (TD.Type ty) cr
     : tks ->
-      static (Token (cl |+| cr) (TD.Type (Ty.unsigned ty)) : tks)
-  Token cl (TD.Type ty)
-    : Token cr (TD.Op Op.MultOrIndir)
+      static (Token (TD.Type (Ty.unsigned ty)) (cl |+| cr) : tks)
+  Token (TD.Type ty) cl
+    : Token (TD.Op Op.MultOrIndir) cr
     : tks ->
-      static (Token (cl |+| cr) (TD.Type (Ty.Pointer ty)) : tks)
-  Token cl TD.Struct
-    : Token cr (TD.Id name)
+      static (Token (TD.Type (Ty.Pointer ty)) (cl |+| cr) : tks)
+  Token TD.Struct cl
+    : Token (TD.Id name) cr
     : tks ->
-      static (Token (cl |+| cr) (TD.Type (Ty.Struct (Just name))) : tks)
-  Token cursor TD.Struct
+      static (Token (TD.Type (Ty.Struct (Just name))) (cl |+| cr) : tks)
+  Token TD.Struct cursor
     : tks ->
-      static (Token cursor (TD.Type (Ty.Struct Nothing)) : tks)
+      static (Token (TD.Type (Ty.Struct Nothing)) cursor : tks)
   (tk : tks) -> tk : static tks
 
 declarations :: [Token] -> [Declaration]
@@ -194,10 +194,10 @@ if_ taken tokens =
   let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
       (then_, rest'') = statement rest'
       taken' = taken ++ cond ++ St.tks then_
-   in case rest'' of
-        elseTk@(Token _ TD.Else) : rest''' ->
-          let (else_, rest'''') = statement rest'''
-           in (Statement (SD.If (expr cond) then_ (Just else_)) (taken' ++ [elseTk] ++ St.tks else_), rest'''')
+   in case map Token.def rest'' of
+        TD.Else : _ ->
+          let (else_, rest''') = statement (drop 1 rest'')
+           in (Statement (SD.If (expr cond) then_ (Just else_)) (taken' ++ take 1 rest'' ++ St.tks else_), rest''')
         _ -> (Statement (SD.If (expr cond) then_ Nothing) taken', rest'')
 
 switch :: [Token] -> [Token] -> (Statement, [Token])
@@ -301,9 +301,9 @@ varStatement ty name taken tokens_ =
     (tokens, rest) = collectUntil TD.Semicolon tokens_
 
 exprList :: [Token] -> [Expr]
-exprList tokens = case tokens of
+exprList tokens = case map Token.def tokens of
   [] -> []
-  Token _ (TD.Op Op.Comma) : tks -> exprList tks
+  TD.Op Op.Comma : _ -> exprList (drop 1 tokens)
   _ -> let (ex, tks) = collectUntil (TD.Op Op.Comma) tokens in expr ex : exprList tks
 
 expr :: [Token] -> Expr
@@ -434,8 +434,8 @@ structFields tokens = case Token.filterNL tokens of
   [] -> Left []
   tokens' ->
     let (field, rest) = collectUntil TD.Semicolon tokens'
-     in case field of
-          [Token _ (TD.Type ty), Token _ (TD.Id name)] -> next (ty, name) rest
+     in case map Token.def field of
+          [TD.Type ty, TD.Id name] -> next (ty, name) rest
           tk : _ -> Right $ "Unexpected token : " ++ show tk
           [] -> Right "Empty field"
   where
@@ -461,9 +461,9 @@ enumVariants tokens = case Token.filterNL tokens of
   [] -> Left []
   tokens' ->
     let (variant, rest) = collectUntil (TD.Op Op.Comma) tokens'
-     in case variant of
-          Token _ (TD.Id name) : Token _ (TD.Op Op.Assign) : rest' -> next (name, Just $ expr rest') rest
-          [Token _ (TD.Id name)] -> next (name, Nothing) rest
+     in case map Token.def variant of
+          TD.Id name : TD.Op Op.Assign : _ -> next (name, Just $ expr (drop 2 variant)) rest
+          [TD.Id name] -> next (name, Nothing) rest
           tk : _ -> Right $ "Unexpected token : " ++ show tk
           [] -> Right "Empty field"
   where

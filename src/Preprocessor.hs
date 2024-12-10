@@ -52,7 +52,7 @@ addFile filePath = do
 parseDirectives :: [Directive] -> [Token] -> ([Directive], [Token])
 parseDirectives directives tokens = case tokens of
   [] -> (directives, [])
-  Token cursor (TD.Directive name) : tks ->
+  Token (TD.Directive name) cursor : tks ->
     let (tks', rest) = collectDirective tks
      in next rest $ case name of
           "include" -> parseInclude tks'
@@ -72,8 +72,8 @@ collectDirective = Token.collectUntil TD.NL
 cleanupTemplate :: [Token] -> [Token]
 cleanupTemplate tokens = case tokens of
   [] -> []
-  Token crs (TD.Directive name) : tks ->
-    Token (Cursor.head crs) TD.Stringize : Token (Cursor.tail crs) (TD.Id (Id name)) : cleanupTemplate tks
+  Token (TD.Directive name) crs : tks ->
+    Token TD.Stringize (Cursor.head crs) : Token (TD.Id (Id name)) (Cursor.tail crs) : cleanupTemplate tks
   tk : tks -> tk : cleanupTemplate tks
 
 applyDirectives :: FilePath -> [Directive] -> [Token] -> IO [Token]
@@ -180,7 +180,7 @@ applyDefine name params template = apply
           _ : _ -> head tokens : go (tail tokens)
 
     stringize :: [Token] -> Token
-    stringize arg = Token cursor (TD.StrLiteral (Constant (Ty.Array Ty.Char $ length str) str))
+    stringize arg = Token (TD.StrLiteral (Constant (Ty.Array Ty.Char $ length str) str)) cursor
       where
         cursor :: Cursor
         cursor = Token.crs (head arg) |+| Token.crs (last arg)

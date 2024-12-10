@@ -14,17 +14,17 @@ import Type (Type)
 import Type qualified
 import Utils (genErrs, Display (..))
 
-data Token = Token {crs :: Cursor, def :: TokenDef}
+data Token = Token {def :: TokenDef, crs :: Cursor}
   deriving (Show)
 
 instance Display Token where
   display :: Token -> String
-  display token = (show . def) token ++ " at " ++ (show . crs) token
+  display = show . def
 
 errs :: [Token] -> [String]
 errs = genErrs isInvalid
   where
-    isInvalid (Token _ (Invalid _)) = True
+    isInvalid (Token (Invalid _) _) = True
     isInvalid _ = False
 
 foldCrs :: [Token] -> Cursor

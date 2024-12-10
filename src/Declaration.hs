@@ -4,7 +4,7 @@ import Expr (Expr)
 import Identifier (Id)
 import Statement (Statement)
 import Statement qualified (errs)
-import Type (Type (..))
+import Type (Type)
 import Token (Token, foldCrs)
 import Utils (Display (..))
 
@@ -13,7 +13,7 @@ data Declaration = Declaration {def :: DeclarationDef, tks :: [Token]}
 
 instance Display Declaration where
   display :: Declaration -> String
-  display = show . def
+  display = display . def
 
 data DeclarationDef
   = FuncDef Type Id [(Type, Id)]
@@ -25,6 +25,17 @@ data DeclarationDef
     Enum (Maybe Id) Type [(Id, Maybe Expr)]
   | Invalid String
   deriving (Show)
+
+instance Display DeclarationDef where
+  display :: DeclarationDef -> String
+  display decl = case decl of
+    FuncDec ty name params sts -> unwords ["FuncDec", show ty, show name, show params, display sts]
+    Enum name ty vars -> unwords ["Enum", show name, show ty, displayVariants vars]
+    _ -> show decl
+    where
+      displayVariants [] = ""
+      displayVariants [(name, ex)] = unwords [show name, display ex]
+      displayVariants (var : vars) = displayVariants [var] ++ displayVariants vars
 
 errs :: [Declaration] -> [String]
 errs = concatMap err
