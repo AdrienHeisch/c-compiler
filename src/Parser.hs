@@ -53,6 +53,10 @@ static tokens = case tokens of
   Token TD.Struct cursor
     : tks ->
       static (Token (TD.Type (Ty.Struct Nothing)) cursor : tks)
+  Token (TD.StrLiteral (Constant (Ty.Array Ty.Char lenl) strl)) cl
+    : Token (TD.StrLiteral (Constant (Ty.Array Ty.Char lenr) strr)) cr
+    : tks ->
+      static (Token (TD.StrLiteral (Constant (Ty.Array Ty.Char (lenl + lenr)) (strl ++ strr))) (cl |+| cr) : tks)
   (tk : tks) -> tk : static tks
 
 declarations :: [Token] -> [Declaration]

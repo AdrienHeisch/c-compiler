@@ -3,7 +3,8 @@
 // #define X 5
 // #define STR(x) #x
 // #define PRINTSTR(x) printf("%s", # x)
-#define PRINTSTR(x, y) printf("%s %s", #x, #y)
+#define PRINTSTR(x, y) printf("%s", #x#y)
+// #define PRINTSTR(x, y) printf("%s %s", #x, #y)
 // #define VAR(a, b) a ## b
 
 /* enum Days : short {
