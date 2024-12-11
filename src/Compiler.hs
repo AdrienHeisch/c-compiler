@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, addVar, getVar, addVars)
+import Context (Context, addVar, addVars, getVar)
 import Context qualified (new)
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
 import Declaration (Declaration)
@@ -11,12 +11,13 @@ import Expr (Expr)
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
 import Identifier (Id)
-import Instruction (Instruction (..), Program (..), Register (..), Value (..))
+import Instruction (Instruction (..), Program (..), Register (..), Value (..), getTyRegs)
 import Op qualified
 import Statement (Statement)
 import Statement qualified
 import Statement qualified as SD (StatementDef (..))
 import Type (Type (Int))
+import Debug.Trace (trace)
 
 compile :: [Declaration] -> Program
 compile decls = Program $ evalState (declarations decls) (Context.new Nothing)
@@ -76,9 +77,8 @@ var ty name mex = case mex of
   Just ex -> do
     modify $ addVar (ty, name)
     ins <- expr ex
-    return $ case ty of
-      Type.Int -> ins ++ [PUSH (Reg I0)]
-      _ -> error $ "Type not implemented in variable assignment : " ++ show ty
+    let (r0 : _) = trace (show $ getTyRegs ty) $ trace (show ty) getTyRegs ty
+     in return $ ins ++ [PUSH (Reg r0)]
 
 -- if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
 -- if_ cond then_ else_ = do
@@ -98,9 +98,8 @@ expr e = case Expr.def e of
     case getVar context name of
       Nothing -> error $ "Undefined identifier : " ++ show name
       Just (idx, ty) ->
-        return $ case ty of
-          Type.Int -> [SET I0 (Reg BP), ADD I0 (Cst idx), LOAD I0 (Reg I0)]
-          _ -> error $ "Type not implemented in binop : " ++ show ty
+        let (r0 : r1 : _) = getTyRegs ty
+         in return [SET r0 (Reg BP), ADD r0 (Cst idx), LOAD r0 (Reg r0)]
   ED.IntLiteral (Constant Type.Int int) -> do
     return [SET I0 (Cst int)]
   -- ED.FltLiteral flt -> []
@@ -111,19 +110,17 @@ expr e = case Expr.def e of
   ED.Binop left op right -> do
     insL <- expr left
     insR <- expr right
+    let (r0 : r1 : _) = getTyRegs $ Expr.eval e
     let insOp = case op of
-          Op.AddOrPlus -> ADD I0 (Reg I1)
-          Op.SubOrNeg -> SUB I0 (Reg I1)
-          Op.MultOrIndir -> MUL I0 (Reg I1)
-          Op.Div -> DIV I0 (Reg I1)
+          Op.AddOrPlus -> ADD r0 (Reg r1)
+          Op.SubOrNeg -> SUB r0 (Reg r1)
+          Op.MultOrIndir -> MUL r0 (Reg r1)
+          Op.Div -> DIV r0 (Reg r1)
           _ -> error $ "Operator not implemented : " ++ show op
-    return $ case Expr.eval left of
-      Type.Int -> insR ++ [PUSH (Reg I0)] ++ insL ++ [POP I1, insOp]
-      ty -> error $ "Type not implemented in binop : " ++ show ty
+    return $ insR ++ [PUSH (Reg r0)] ++ insL ++ [POP r1, insOp]
   -- ED.Ternary ter_cond ter_then ter_else -> []
   -- ED.Call ex args -> []
   ED.Parenthese ex -> expr ex
   ED.Invalid str -> error $ "Invalid expression : " ++ str
   _ -> error $ "Expression not implemented yet : " ++ show e
-  -- where
-  --   get2Regs ex = 
+

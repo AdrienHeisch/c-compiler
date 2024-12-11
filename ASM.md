@@ -70,6 +70,6 @@ With N being a register, a constant or eventually a label
 
 # Encoding
 
-OP CODE  : 1 byte
-OP LEFT  : 8 bytes
-OP RIGHT : 8 bytes
+OP CODE			: 1 byte, first bit = right is register
+OP LEFT			: 1 bytes
+OP RIGHT		: 8 bytes

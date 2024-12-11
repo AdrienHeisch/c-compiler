@@ -31,8 +31,9 @@ eval expr = case Expr.def expr of
   ArrayDecl arr@(ex : _) -> Type.Array (eval ex) (length arr)
   UnopPre op ex -> error "Unop evaluation not implemented"
   UnopPost op ex -> error "Unop evaluation not implemented"
-  Binop left op right -> eval left -- TODO might be wrong ? divisions ?
-  Binop left op right -> eval left -- TODO might be wrong ? divisions ?
+  Binop left op right -> case eval left of -- TODO might be wrong ? divisions ?
+    Type.Infer -> eval right
+    ty -> ty
   Ternary ter_cond ter_then ter_else -> error "Ternary evaluation not implemented"
   Call ex _ -> eval ex
   Parenthese ex -> eval ex
