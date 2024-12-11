@@ -1,5 +1,5 @@
-int main (int p, int q) {
-    int a = 2;
-    int b = 7;
-    q;
+int main () {
+    int a = 3;
+    a + 2;
+    // int b = a + 9;
 }

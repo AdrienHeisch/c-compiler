@@ -12,7 +12,7 @@ import Op (Op)
 import Op qualified
 import Type (Type)
 import Type qualified
-import Utils (genErrs, Display (..))
+import Utils (Display (..), genErrs)
 
 data Token = Token {def :: TokenDef, crs :: Cursor}
   deriving (Show)
