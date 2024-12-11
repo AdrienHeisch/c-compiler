@@ -1,4 +1,14 @@
-module Instruction (Instruction (..), Register (..), Cst, Address) where
+module Instruction (Program (..), Instruction (..), Register (..), Cst, Address) where
+
+import Data.List (intercalate)
+import Utils (Display (display))
+
+newtype Program = Program [Instruction]
+  deriving (Show)
+
+instance Utils.Display Program where
+  display :: Program -> String
+  display (Program ins) = intercalate "\n" . map show $ ins
 
 data Instruction
   = NOP
@@ -6,6 +16,7 @@ data Instruction
   | SYS_CALL Cst
   | CLEAR Register
   | CONST Register Cst
+  | CPY Register Register
   | LOAD Register Address
   | STORE Register Address
   | SWAP Register Register
@@ -33,6 +44,8 @@ data Instruction
   | RCL Register Register
   | RCR Register Register
   | BSWAP Register Register
+  | PUSHC Cst
+  | POPC Address
   | PUSH Register
   | POP Register
   | DROP
@@ -56,7 +69,11 @@ type Cst = Int
 type Address = Int
 
 data Register
-  = C0
+  = BP
+  | SP
+  | RR
+  | SR
+  | C0
   | C1
   | S0
   | S1

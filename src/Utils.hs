@@ -16,10 +16,16 @@ withSplit l f n = let (tk, dp) = splitAt n l in f tk dp
 withSplitTpl :: [a] -> ([a] -> t) -> Int -> (t, [a])
 withSplitTpl l f n = let (tk, dp) = splitAt n l in (f tk, dp)
 
-class Display a where
-    display :: a -> String
+modifyFirst :: (a -> Bool) -> (a -> a) -> [a] -> [a]
+modifyFirst _ _ [] = []
+modifyFirst predicate transformer (x : xs)
+  | predicate x = transformer x : xs
+  | otherwise = x : modifyFirst predicate transformer xs
 
-instance Display a => Display [a] where
+class Display a where
+  display :: a -> String
+
+instance (Display a) => Display [a] where
   display :: [a] -> String
   display l = "[" ++ go l ++ "]"
     where
@@ -27,7 +33,7 @@ instance Display a => Display [a] where
       go [x] = display x
       go (x : xs) = display x ++ ", " ++ go xs
 
-instance Display a => Display (Maybe a) where
+instance (Display a) => Display (Maybe a) where
   display :: Maybe a -> String
   display m = "[" ++ go m ++ "]"
     where

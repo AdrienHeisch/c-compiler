@@ -3,6 +3,7 @@
 PC				Program counter
 IR				Instruction register
 SP				Stack pointer
+BP				Base pointer
 RR				Return register
 C0, C1, S0...	General purpose registers
 SR				Status register with flags :
@@ -23,6 +24,7 @@ HALT RX	_			Stop execution with an exit value from RX
 SYS_CALL N _		Invoke system call with id N taking parameters from the stack
 CLEAR RX _			Load the 0 constant into RX
 CONST RX N			Load a constant into RX
+CPY RX RY			Copy RY into RX
 LOAD RX ADDR		Load a value from memory into RX
 STORE RX ADDR		Store a value from RX to memory
 SWAP RX RY			Swap the values of RX and RY
@@ -50,6 +52,7 @@ SHR RX RY			Shift the bits in register RX right by RY positions
 RCL RX RY			Rotate the bits in RX left by RY positions with carry
 RCR RX RY			Rotate the bits in RX right by RY positions with carry
 BSWAP RX RY			Swap the byte order of the value in RX
+PUSHC N _			Push a constant onto the stack
 PUSH RX _			Push the value of RX onto the stack
 POP RX _			Pop the top value from the stack and discard it
 DROP _ _			Pop the top value from the stack into RX

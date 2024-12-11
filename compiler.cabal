@@ -80,7 +80,8 @@ executable compiler
         Delimiter,
         Validator,
         Compiler,
-        Instruction
+        Instruction,
+        Context
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -89,7 +90,8 @@ executable compiler
     build-depends:   
         base ^>=4.17.2.1,
         text,
-        filepath
+        filepath,
+        mtl
 
     -- Directories containing source files.
     hs-source-dirs:   src

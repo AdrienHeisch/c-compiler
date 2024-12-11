@@ -16,10 +16,10 @@ compileFile filePath = do
   putStrLn $ "Preprocessor " ++ filePath ++ " :"
   putStrLn $ display tokens
   let topLevel = Parser.parse tokens
-  putStrLn $ "Parser :" ++ filePath ++ " :"
+  putStrLn $ "Parser " ++ filePath ++ " :"
   putStrLn $ display topLevel
   if validate topLevel
     then do
-      putStrLn "Bytecode :"
-      print $ compile topLevel
+      putStrLn $ "Bytecode " ++ filePath ++ " :"
+      putStrLn $ display $ compile topLevel
     else error "Invalid program"

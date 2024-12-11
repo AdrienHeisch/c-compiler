@@ -4,7 +4,8 @@ import Identifier (Id)
 import Identifier qualified
 
 data Type
-  = Void
+  = Infer
+  | Void
   | Bool
   | Char
   | UChar
@@ -84,6 +85,7 @@ isFloating ty = ty `elem` floating
 
 toStr :: Type -> String
 toStr ty = case ty of
+  Infer -> error "Infer type should not be stringified"
   Void -> "void"
   Bool -> "bool"
   Char -> "char"
