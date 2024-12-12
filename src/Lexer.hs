@@ -67,20 +67,27 @@ getCursor text idx = go (Cursor idx 1)
     first :: Char
     first = Text.index text idx
 
-    peek :: Cursor -> Char
-    peek cursor = Text.index text (Cursor.end cursor)
+    peek :: Cursor -> Maybe Char
+    peek cursor =
+      let end = Cursor.end cursor
+       in if end < len
+            then Just $ Text.index text (Cursor.end cursor)
+            else Nothing
+
+    len :: Int
+    len = Text.length text
 
     getUntil :: Cursor -> Char -> Cursor
     getUntil cursor terminator =
-      if peek cursor == terminator
-        then Cursor.expand cursor
-        else getUntil (Cursor.expand cursor) terminator
+      case peek cursor of
+        Just c | c == terminator -> Cursor.expand cursor
+        _ -> getUntil (Cursor.expand cursor) terminator
 
     getWhile :: Cursor -> (Char -> Bool) -> Cursor
     getWhile cursor predicate =
-      if predicate (peek cursor)
-        then getWhile (Cursor.expand cursor) predicate
-        else cursor
+      case peek cursor of
+        Just c | predicate c -> getWhile (Cursor.expand cursor) predicate
+        _ -> cursor
 
 readCursor :: Text -> Cursor -> String
 readCursor text (Cursor idx len) = Text.unpack $ Text.take len $ Text.drop idx text
