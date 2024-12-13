@@ -48,7 +48,7 @@ instance Display StatementDef where
     For e0 e1 e2 st -> unwords ["ForVar", display e0, display e1, display e1, display e2, display st]
     ForVar st0 e0 e1 st1 -> unwords ["ForVar", display st0, display e0, display e1, display e1, display st1]
     Return e -> "Return " ++ display e
-    Block block -> display block
+    Block block -> "Block " ++ display block
     _ -> show statement
 
 errs :: [Statement] -> [String]
