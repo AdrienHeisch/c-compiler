@@ -77,7 +77,7 @@ var ty name mex = case mex of
   Just ex -> do
     modify $ addVar (ty, name)
     ins <- expr ex
-    let (r0 : _) = trace (show $ getTyRegs ty) $ trace (show ty) getTyRegs ty
+    let (r0, _) = trace (show $ getTyRegs ty) $ trace (show ty) getTyRegs ty
      in return $ ins ++ [PUSH (Reg r0)]
 
 -- if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
@@ -98,7 +98,7 @@ expr e = case Expr.def e of
     case getVar context name of
       Nothing -> error $ "Undefined identifier : " ++ show name
       Just (idx, ty) ->
-        let (r0 : r1 : _) = getTyRegs ty
+        let (r0, _) = getTyRegs ty
          in return [SET r0 (Reg BP), ADD r0 (Cst idx), LOAD r0 (Reg r0)]
   ED.IntLiteral (Constant Type.Int int) -> do
     return [SET I0 (Cst int)]
@@ -110,7 +110,7 @@ expr e = case Expr.def e of
   ED.Binop left op right -> do
     insL <- expr left
     insR <- expr right
-    let (r0 : r1 : _) = getTyRegs $ Expr.eval e
+    let (r0, r1) = getTyRegs $ Expr.eval e
     let insOp = case op of
           Op.AddOrPlus -> ADD r0 (Reg r1)
           Op.SubOrNeg -> SUB r0 (Reg r1)

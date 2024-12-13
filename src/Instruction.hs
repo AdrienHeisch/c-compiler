@@ -92,16 +92,16 @@ data Register
   | P1
   deriving (Show, Enum)
 
-getTyRegs :: Type -> [Register]
+getTyRegs :: Type -> (Register, Register)
 getTyRegs ty
-  | ty `elem` [Type.Bool, Type.Char, Type.UChar] = [C0, C1]
-  | ty `elem` [Type.Short, Type.UShort] = [S0, S1]
-  | ty `elem` [Type.Int, Type.UInt] = [I0, I1]
-  | ty `elem` [Type.Long, Type.ULong] = [L0, L1]
-  -- | ty `elem` [Type.LLong, Type.ULLong] = [L0, L1]
-  | ty == Type.Float = [F0, F1]
-  | ty == Type.Double = [D0, D1]
-  -- | ty == Type.LDouble = [D0, D1]
+  | ty `elem` [Type.Bool, Type.Char, Type.UChar] = (C0, C1)
+  | ty `elem` [Type.Short, Type.UShort] = (S0, S1)
+  | ty `elem` [Type.Int, Type.UInt] = (I0, I1)
+  | ty `elem` [Type.Long, Type.ULong] = (L0, L1)
+  -- | ty `elem` [Type.LLong, Type.ULLong] = (L0, L1)
+  | ty == Type.Float = (F0, F1)
+  | ty == Type.Double = (D0, D1)
+  -- | ty == Type.LDouble = (D0, D1)
   | otherwise = error $ "No general use register for type : " ++ show ty
 
 regLen :: (Num a) => Register -> a

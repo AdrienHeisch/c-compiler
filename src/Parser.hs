@@ -22,7 +22,7 @@ import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
-import Utils (listToMaybeList, withSplit)
+import Utils (listToMaybeList)
 
 parse :: [Token] -> [Declaration]
 parse tokens =
@@ -422,7 +422,7 @@ collectParameters = do
           case mparams of
             Left params -> return (Left $ (ty, name) : params, take 2 tokens ++ tks)
             Right err -> return (Right err, tks)
-          -- withSplit tokens''' (next (ty, name)) 3
+        -- withSplit tokens''' (next (ty, name)) 3
         TD.Type _ : TD.Id _ : tk : _ -> return (Right $ "Expected , or ) but got " ++ show tk, take 2 tokens)
         _ -> return (Right $ "Invalid parameters : " ++ show tokens, [])
 
