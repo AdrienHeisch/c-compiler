@@ -43,7 +43,7 @@ instance Display StatementDef where
     Var ty name e -> unwords ["Var", show ty, show name, display e]
     If e st0 st1 -> unwords ["If", display e, display st0, display st1]
     Switch e st -> unwords ["Switch", display e, display st]
-    While e st -> unwords ["Switch", display e, display st]
+    While e st -> unwords ["While", display e, display st]
     DoWhile st e -> unwords ["DoWhile", display st,  display e]
     For e0 e1 e2 st -> unwords ["ForVar", display e0, display e1, display e1, display e2, display st]
     ForVar st0 e0 e1 st1 -> unwords ["ForVar", display st0, display e0, display e1, display e1, display st1]
