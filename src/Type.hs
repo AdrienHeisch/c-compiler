@@ -1,4 +1,4 @@
-module Type (Type (..), signed, unsigned, isInteger, isFloating, toStr) where
+module Type (Type (..), signed, unsigned, isInteger, isFloating, len, toStr) where
 
 import Identifier (Id)
 import Identifier qualified
@@ -82,6 +82,27 @@ floating =
 
 isFloating :: Type -> Bool
 isFloating ty = ty `elem` floating
+
+len :: Type -> Int -- TODO duplicate of register len
+len ty = case ty of
+  Bool -> 1
+  Char -> 1
+  UChar -> 1
+  Short -> 2
+  UShort -> 2
+  Int -> 4
+  UInt -> 4
+  Long -> 8
+  ULong -> 8
+  LLong -> 8
+  ULLong -> 8
+  Float -> 4
+  Double -> 8
+  LDouble -> 8
+  Pointer _ -> 8
+  Array ty' len' -> len ty' * len'
+  _ -> error "Unsized type"
+
 
 toStr :: Type -> String
 toStr ty = case ty of

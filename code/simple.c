@@ -1,7 +1,9 @@
-// #include "./dir/dir2/macro.h"
-// #include "./dir/sub.h"
-
 int main () {
-    int a = 250;
-    a + 2;
+    int a = 2;
+    int i = (8 - 1);
+    while (i) {
+        a = a + a;
+        i = i - 1;
+    }
+    a;
 }

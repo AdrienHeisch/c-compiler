@@ -1,17 +1,51 @@
 module Assembler (assemble) where
 
+import Control.Monad.State.Lazy (State, evalState, runState, get, modify, put)
 import Data.Bits (Bits (..))
 import Data.Word (Word8)
 import Instruction (Instruction (..), Program (..), Register, Value (..), regLen)
+import Debug.Trace (trace)
+
+type AsmState = State (Int, [Int])
+
+type PartialJmp = (Word8, Maybe Register, Int)
 
 assemble :: Program -> [Word8]
-assemble (Program ins) = go ins
-  where
-    go ins' = case ins' of
-      [] -> []
-      (instr : rest) -> bytecode instr ++ go rest
+assemble (Program ins) = evalState (firstPass ins >>= secondPass) (0, [])
 
-bytecode :: Instruction -> [Word8]
+pcAdd :: Num a => a -> (a, b) -> (a, b)
+pcAdd n st = let (pc, lbls) = st in (pc + n, lbls)
+
+secondPass :: [Either [Word8] PartialJmp] -> AsmState [Word8]
+secondPass ins = case ins of
+  [] -> return []
+  (Left bytes : rest) -> do
+    rest' <- secondPass rest
+    return $ bytes ++ rest'
+  (Right (op, reg, lbl) : rest) -> do
+    rest' <- secondPass rest
+    modify $ pcAdd 1
+    addr <- getLabel lbl
+    let !_ = trace ("Jump: op " ++ show op ++ " reg " ++ show reg ++ " lbl " ++ show lbl ++ " -> addr " ++ show addr) ()
+    return $ asmRC op reg addr ++ rest'
+
+firstPass :: [Instruction] -> AsmState [Either [Word8] PartialJmp]
+firstPass ins = case ins of
+  [] -> return []
+  (instr : rest) -> do
+    mbytes <- bytecode instr
+    case mbytes of
+      Nothing -> firstPass rest
+      Just bytes -> do
+        modify $ pcAdd 1
+        rest' <- firstPass rest
+        return $ bytes : rest'
+        -- return $ transform bytes ++ rest'
+  -- where
+    -- transform (Left bytes) = map Left bytes
+    -- transform (Right jmp) = [Right jmp]
+
+bytecode :: Instruction -> AsmState (Maybe (Either [Word8] PartialJmp))
 bytecode instr = case instr of
   NOP -> make 0x00
   HALT (Reg r) -> makeR 0x01 r
@@ -32,7 +66,6 @@ bytecode instr = case instr of
   INC r -> makeR 0x0A r
   DEC r -> makeR 0x0B r
   ADD r (Reg r') -> makeRR 0x0C r r'
-  ADD _ (Cst 0) -> []
   ADD r (Cst c) -> makeRC 0x0C r c
   SUB r (Reg r') -> makeRR 0x0D r r'
   SUB r (Cst c) -> makeRC 0x0D r c
@@ -73,52 +106,82 @@ bytecode instr = case instr of
   RET -> make 0x21
   JMP (Reg r) -> makeR 0x22 r
   JMP (Cst c) -> makeC 0x22 c
-  -- JMP (Lbl l) -> makeL 0x22 l
+  JMP (Lbl l) -> makeL 0x22 l
   JEQ r (Reg r') -> makeRR 0x23 r r'
   JEQ r (Cst c) -> makeRC 0x23 r c
-  -- JEQ r (Lbl l) -> makeRL 0x23 r l
+  JEQ r (Lbl l) -> makeRL 0x23 r l
   JNE r (Reg r') -> makeRR 0x24 r r'
   JNE r (Cst c) -> makeRC 0x24 r c
-  -- JNE r (Lbl l) -> makeRL 0x24 r l
+  JNE r (Lbl l) -> makeRL 0x24 r l
   JGT r (Reg r') -> makeRR 0x25 r r'
   JGT r (Cst c) -> makeRC 0x25 r c
-  -- JGT r (Lbl l) -> makeRL 0x25 r l
+  JGT r (Lbl l) -> makeRL 0x25 r l
   JGE r (Reg r') -> makeRR 0x26 r r'
   JGE r (Cst c) -> makeRC 0x26 r c
-  -- JGE r (Lbl l) -> makeRL 0x26 r l
+  JGE r (Lbl l) -> makeRL 0x26 r l
   JLT r (Reg r') -> makeRR 0x27 r r'
   JLT r (Cst c) -> makeRC 0x27 r c
-  -- JLT r (Lbl l) -> makeRL 0x27 r l
+  JLT r (Lbl l) -> makeRL 0x27 r l
   JLE r (Reg r') -> makeRR 0x28 r r'
   JLE r (Cst c) -> makeRC 0x28 r c
-  -- JLE r (Lbl l) -> makeRL 0x4D r l
+  JLE r (Lbl l) -> makeRL 0x4D r l
   PRINT (Reg r) -> makeR 0x29 r
   PRINT (Cst c) -> makeC 0x29 c
   EPRINT (Reg r) -> makeR 0x2A r
   EPRINT (Cst c) -> makeC 0x2A c
   DUMP -> make 0x2B
-  LABEL _ -> error "Can't transalte label into opcode"
+  LABEL l -> do
+    newLabel l
+    return Nothing
   _ -> error $ "Invalid operation : " ++ show instr
   where
-    regFlag = (.|.) (0b10000000 :: Word8)
+    make op = return $ Just $ Left $ asmRR op Nothing (0 :: Int)
+    makeR op r = return $ Just $ Left $ asmRR op (Just r) (0 :: Int)
+    makeRR op r r' = return $ Just $ Left $ asmRR op (Just r) (regToInt r')
+    makeC op c = return $ Just $ Left $ asmRC op Nothing c
+    makeRC op r c = return $ Just $ Left $ asmRC op (Just r) c
 
-    asmRR :: Word8 -> Maybe Register -> Int -> [Word8]
-    asmRR op Nothing val = [regFlag op, 0, intoByte val]
-    asmRR op (Just reg) val = [regFlag op, intoByte (regToInt reg), intoByte val]
+    makeL op l = return $ Just $ Right (op, Nothing, l)
+    makeRL op r l = return $ Just $ Right (op, Just r, l)
 
-    asmRC :: Word8 -> Maybe Register -> Int -> [Word8]
-    asmRC op Nothing val = op : 0 : intoByteArray val 8
-    asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoByteArray val (regLen reg)
-    
-    make op = asmRR op Nothing (0 :: Int)
-    makeR op r = asmRR op (Just r) (0 :: Int)
-    makeC op = asmRC op Nothing
-    -- makeL op l = asm op Nothing $ error "Labels not implemented"
-    makeRR op r r' = asmRR op (Just r) (regToInt r')
-    makeRC op r = asmRC op (Just r)
-    -- makeRL op r l = asmRC op (reg r) $ error "Labels not implemented"
+asmRR :: Word8 -> Maybe Register -> Int -> [Word8]
+asmRR op Nothing val = [regFlag op, 0, intoByte val]
+asmRR op (Just reg) val = [regFlag op, intoByte (regToInt reg), intoByte val]
 
-    intoByte n = fromIntegral n :: Word8
-    intoByteArray n len = [fromIntegral ((n `shiftR` (i * 8)) .&. 0xFF) | i <- [0 .. len - 1]]
+asmRC :: Word8 -> Maybe Register -> Int -> [Word8]
+asmRC op Nothing val = op : 0 : intoByteArray val 8
+asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoByteArray val (regLen reg)
 
-    regToInt = (.&. ((1 `shiftL` 64) - 1)) . fromEnum
+regFlag :: Word8 -> Word8
+regFlag = (.|.) (0b10000000 :: Word8)
+
+intoByte :: Integral a => a -> Word8
+intoByte n = fromIntegral n :: Word8
+
+intoByteArray :: (Integral a1, Bits a1, Num a2) => a1 -> Int -> [a2]
+intoByteArray n len = [fromIntegral ((n `shiftR` (i * 8)) .&. 0xFF) | i <- [0 .. len - 1]]
+
+regToInt :: Register -> Int
+regToInt = (.&. ((1 `shiftL` 64) - 1)) . fromEnum
+
+-- withLabel :: (Int -> [Word8]) -> Int -> State Status [Word8]
+-- withLabel f lbl = do
+--   addr <- getLabel lbl
+--   return $ f addr
+
+getLabel :: Int -> AsmState Int
+getLabel lbl = do
+  (_, labels) <- get
+  -- let !_ = trace ("get: " ++ show labels) ()
+  return $ labels !! lbl
+
+newLabel :: Int -> AsmState ()
+newLabel lbl = do -- TODO remove this parameter and related code in compiler
+  (pc, labels) <- get
+  -- let newLabels = case length labels of
+  --       len | len + 1 == lbl -> labels ++ [pc]
+  --       len | len < lbl -> take lbl labels ++ [pc]
+  --       _ -> error "Can't declare label"
+  -- let !_ = trace ("set: " ++ show newLabels) ()
+  let newLabels = labels ++ [pc]
+  put (pc, newLabels)

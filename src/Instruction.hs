@@ -1,16 +1,22 @@
 module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen, getTyRegs) where
 
-import Data.List (intercalate)
 import Type (Type)
 import Type qualified (Type (..))
 import Utils (Display (display))
+import Text.Printf (printf)
 
 newtype Program = Program [Instruction]
   deriving (Show)
 
 instance Utils.Display Program where
   display :: Program -> String
-  display (Program ins) = intercalate "\n" . map show $ ins
+  -- display (Program ins) = intercalate "\n" . map show $ ins
+  display (Program ins) = go 0 ins
+    where
+      go (pc :: Int) ins' = case ins' of
+        [] -> ""
+        LABEL l : rest -> show l ++ ":\n" ++ go pc rest
+        instr : rest -> "  " ++ printf "%04d" pc ++ "  " ++ show instr ++ "\n" ++ go (pc + 1) rest
 
 data Instruction
   = LABEL Int

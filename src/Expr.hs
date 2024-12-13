@@ -23,7 +23,7 @@ errs = genErrs isInvalid
 
 eval :: Expr -> Type
 eval expr = case Expr.def expr of
-  Id _ -> Type.Infer
+  Id _ -> Type.Int -- FIXME for testing Type.Infer
   IntLiteral (Constant ty _) -> ty
   FltLiteral (Constant ty _) -> ty
   StrLiteral (Constant ty _) -> ty
