@@ -84,7 +84,7 @@ makeDef str = case str of
   "signed" -> Signed
   "unsigned" -> Unsigned
   "auto" -> keywordUnimplErr str
-  "const" -> Const
+  "const" -> keywordUnimplErr str
   "static" -> keywordUnimplErr str
   "static_assert" -> keywordUnimplErr str
   "constexpr" -> keywordUnimplErr str
