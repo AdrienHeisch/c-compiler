@@ -2,6 +2,7 @@ module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef,
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
+import Control.Monad.State.Lazy (State, get, modify)
 import Cursor (Cursor, fold)
 import Data.Char (ord, toLower)
 import Delimiter (Delimiter)
@@ -251,35 +252,47 @@ defToStr tkDef = case tkDef of
   Invalid str -> str
   _ -> map toLower $ show tkDef
 
-collectUntil :: TokenDef -> [Token] -> ([Token], [Token])
-collectUntil end tokens = case tokens of
-  [] -> ([], [])
-  (tk : tks) | Token.def tk == end -> ([], tks)
-  (tk : tks) ->
-    let (tks', rest) = collectUntil end tks
-     in (tk : tks', rest)
+collectUntil :: TokenDef -> State [Token] [Token]
+collectUntil end = do
+  tokens <- get
+  case tokens of
+    [] -> return []
+    (tk : _) | Token.def tk == end -> do modify $ drop 1; return []
+    (tk : _) -> do
+      modify $ drop 1
+      tks' <- collectUntil end
+      return $ tk : tks'
 
-collectUntilDelimiter :: Delimiter -> [Token] -> ([Token], [Token])
+collectUntilDelimiter :: Delimiter -> State [Token] [Token]
 collectUntilDelimiter del = go 0
   where
-    go :: Int -> [Token] -> ([Token], [Token])
-    go depth tokens = case tokens of
-      [] -> ([], [])
-      (tk : tks)
-        | Token.def tk == DelimClose del && depth == 0 -> ([], tks)
-        | Token.def tk == DelimClose del -> next tk tks (depth - 1)
-        | Token.def tk == DelimOpen del -> next tk tks (depth + 1)
-        | otherwise -> next tk tks depth
+    go :: Int -> State [Token] [Token]
+    go depth = do
+      tokens <- get
+      case tokens of
+        [] -> return []
+        (tk : _)
+          | Token.def tk == DelimClose del && depth == 0 -> do modify $ drop 1; return []
+          | Token.def tk == DelimClose del -> next tk (depth - 1)
+          | Token.def tk == DelimOpen del -> next tk (depth + 1)
+          | otherwise -> next tk depth
 
-    next :: Token -> [Token] -> Int -> ([Token], [Token])
-    next tk rest depth =
-      let (tks', rest') = go depth rest
-       in (tk : tks', rest')
+    next :: Token -> Int -> State [Token] [Token]
+    next tk depth = do
+      modify $ drop 1
+      tks <- go depth
+      return $ tk : tks
 
-parseList :: TokenDef -> ([Token] -> (el, [Token])) -> [Token] -> [el]
-parseList end parser tokens = case tokens of
-  [] -> []
-  (tk : tks) | Token.def tk == end -> parseList end parser tks
-  _ ->
-    let (el, tks) = parser tokens
-     in el : parseList end parser tks
+parseList :: TokenDef -> State [Token] a -> State [Token] [a]
+parseList end parser = do
+  tokens <- get
+  case tokens of
+    [] -> return []
+    (tk : _) | Token.def tk == end -> do
+      modify $ drop 1
+      parseList end parser
+    _ -> do
+      el <- parser
+      modify $ drop 1
+      els <- parseList end parser
+      return $ el : els

@@ -1,5 +1,13 @@
 module Utils where
 
+import Control.Monad.State.Lazy (State, StateT, get, put, runState)
+
+mtransform :: State a b -> StateT a IO b
+mtransform st = do
+  (values, newState) <- runState st <$> get
+  put newState
+  return values
+
 genErrs :: (Show a) => (a -> Bool) -> [a] -> [String]
 genErrs f = map show . filter f
 

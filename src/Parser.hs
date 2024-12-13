@@ -1,6 +1,7 @@
 module Parser (parse) where
 
 import Constant (Constant (..))
+import Control.Monad.State.Lazy (State, evalState, get, modify, runState)
 import Cursor (CursorOps (..))
 import Data.List (intercalate)
 import Declaration (Declaration (Declaration), DeclarationDef)
@@ -21,11 +22,11 @@ import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
-import Utils (listToMaybeList, withSplit, withSplitTpl)
+import Utils (listToMaybeList, withSplit)
 
 parse :: [Token] -> [Declaration]
 parse tokens =
-  let decls = declarations (static tokens)
+  let decls = evalState declarations (static tokens)
       !_ = case Declaration.errs decls of
         [] -> ()
         tkErrs -> error $ "Parser errors :\n" ++ intercalate "\n" tkErrs
@@ -59,256 +60,282 @@ static tokens = case tokens of
       static (Token (TD.StrLiteral (Constant (Ty.Array Ty.Char (lenl + lenr)) (strl ++ strr))) (cl |+| cr) : tks)
   (tk : tks) -> tk : static tks
 
-declarations :: [Token] -> [Declaration]
-declarations tokens = case map Token.def tokens of
-  [] -> []
-  [TD.Eof] -> []
-  TD.Enum
-    : TD.Id name
-    : TD.Op Op.Colon
-    : TD.Type ty
-    : TD.DelimOpen Dl.Br
-    : _ ->
-      put $ makeWith (enum (Just name) ty) 5
-  TD.Enum
-    : TD.Op Op.Colon
-    : TD.Type ty
-    : TD.DelimOpen Dl.Br
-    : _ ->
-      put $ makeWith (enum Nothing ty) 4
-  TD.Enum
-    : TD.Id name
-    : TD.DelimOpen Dl.Br
-    : _ ->
-      put $ makeWith (enum (Just name) Ty.Int) 3
-  TD.Enum
-    : TD.DelimOpen Dl.Br
-    : _ ->
-      put $ makeWith (enum Nothing Ty.Int) 2
-  TD.Type (Ty.Struct name)
-    : TD.DelimOpen Dl.Br
-    : _ ->
-      put $ makeWith (struct name) 2
-  TD.Type ty
-    : TD.Id name
-    : TD.DelimOpen Dl.Pr
-    : _ ->
-      put $ makeWith (func ty name) 3
-  TD.NL
-    : _ ->
-      declarations (drop 1 tokens)
-  tkDef
-    : _ ->
-      Declaration (DD.Invalid ("Unexpected token " ++ show tkDef)) (take 1 tokens) : declarations (drop 1 tokens)
+declarations :: State [Token] [Declaration]
+declarations = do
+  tokens <- get
+  case map Token.def tokens of
+    [] -> return []
+    [TD.Eof] -> return []
+    TD.Enum
+      : TD.Id name
+      : TD.Op Op.Colon
+      : TD.Type ty
+      : TD.DelimOpen Dl.Br
+      : _ -> do
+        go (enum (Just name) ty) 5
+    TD.Enum
+      : TD.Op Op.Colon
+      : TD.Type ty
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        go (enum Nothing ty) 4
+    TD.Enum
+      : TD.Id name
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        go (enum (Just name) Ty.Int) 3
+    TD.Enum
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        go (enum Nothing Ty.Int) 2
+    TD.Type (Ty.Struct name)
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        go (struct name) 2
+    TD.Type ty
+      : TD.Id name
+      : TD.DelimOpen Dl.Pr
+      : _ ->
+        go (func ty name) 3
+    TD.NL
+      : _ -> do
+        modify $ drop 1
+        declarations
+    tkDef
+      : _ -> do
+        modify $ drop 1
+        decls <- declarations
+        return $ Declaration (DD.Invalid ("Unexpected token " ++ show tkDef)) (take 1 tokens) : decls
   where
-    put :: (Declaration, [Token]) -> [Declaration]
-    put tuple =
-      let (declaration, tks) = tuple
-       in declaration : declarations tks
+    go :: ([Token] -> State [Token] Declaration) -> Int -> State [Token] [Declaration]
+    go make skip = do
+      tokens <- get
+      let taken = take skip tokens
+      modify $ drop skip
+      decl <- make taken
+      decls <- declarations
+      return $ decl : decls
 
-    makeWith = withSplit tokens
-
-statementList :: [Token] -> [Statement]
--- FIXME why NL ?
+statementList :: State [Token] [Statement]
+-- FIXME why NL and not ; ?
 statementList = parseList TD.NL statement
 
-statement :: [Token] -> (Statement, [Token])
-statement tokens = case map Token.def tokens of
-  [] ->
-    make (Statement SD.Empty) 0
-  TD.NL
-    : _ ->
-      make (Statement SD.Empty) 1
-  TD.Semicolon
-    : _ ->
-      make (Statement SD.Empty) 1
-  TD.If
-    : TD.DelimOpen Dl.Pr
-    : _ ->
-      makeWith if_ 1
-  TD.Switch
-    : TD.DelimOpen Dl.Pr
-    : _ ->
-      makeWith switch 1
-  TD.While
-    : TD.DelimOpen Dl.Pr
-    : _ ->
-      makeWith while 1
-  TD.Do
-    : _ ->
-      makeWith doWhile 1
-  TD.For
-    : TD.DelimOpen Dl.Pr
-    : _ ->
-      makeWith for 2
-  TD.DelimOpen Dl.Br
-    : _ ->
-      makeWith block 1
-  TD.Return
-    : _ ->
-      makeWith return_ 1
-  TD.Goto
-    : TD.Id name
-    : TD.Semicolon
-    : _ ->
-      make (Statement (SD.Goto name)) 3
-  TD.Break
-    : TD.Semicolon
-    : _ ->
-      make (Statement SD.Break) 3
-  TD.Continue
-    : TD.Semicolon
-    : _ ->
-      make (Statement SD.Continue) 3
-  TD.Case
-    : _ ->
-      makeWith case_ 1
-  TD.Id name
-    : TD.Op Op.Colon
-    : _ ->
-      makeWith (label name) 2
-  TD.Type ty
-    : TD.Id name
-    : TD.DelimOpen Dl.SqBr
-    : TD.IntLiteral (Constant len_ty len)
-    : TD.DelimClose Dl.SqBr
-    : _
-      | Ty.isInteger len_ty ->
-          makeWith (varStatement (Ty.Array ty len) name) 5
-  TD.Type ty
-    : TD.Id name
-    : TD.DelimOpen Dl.SqBr
-    : TD.DelimClose Dl.SqBr
-    : _ ->
-      makeWith (varStatement (Ty.ArrayNoHint ty) name) 4
-  TD.Type ty
-    : TD.Id name
-    : _ ->
-      makeWith (varStatement ty name) 2
-  _ ->
-    let (tokens', rest') = collectUntil TD.Semicolon tokens
-        expression = expr tokens'
-     in (Statement (SD.Expr expression) (Expr.tks expression), rest')
+statement :: State [Token] Statement
+statement = do
+  tokens <- get
+  case map Token.def tokens of
+    [] ->
+      make (Statement SD.Empty) 0
+    TD.NL
+      : _ ->
+        make (Statement SD.Empty) 1
+    TD.Semicolon
+      : _ ->
+        make (Statement SD.Empty) 1
+    TD.If
+      : TD.DelimOpen Dl.Pr
+      : _ ->
+        makeWith if_ 1
+    TD.Switch
+      : TD.DelimOpen Dl.Pr
+      : _ ->
+        makeWith switch 1
+    TD.While
+      : TD.DelimOpen Dl.Pr
+      : _ ->
+        makeWith while 1
+    TD.Do
+      : _ ->
+        makeWith doWhile 1
+    TD.For
+      : TD.DelimOpen Dl.Pr
+      : _ ->
+        makeWith for 2
+    TD.DelimOpen Dl.Br
+      : _ ->
+        makeWith block 1
+    TD.Return
+      : _ ->
+        makeWith return_ 1
+    TD.Goto
+      : TD.Id name
+      : TD.Semicolon
+      : _ ->
+        make (Statement (SD.Goto name)) 3
+    TD.Break
+      : TD.Semicolon
+      : _ ->
+        make (Statement SD.Break) 3
+    TD.Continue
+      : TD.Semicolon
+      : _ ->
+        make (Statement SD.Continue) 3
+    TD.Case
+      : _ ->
+        makeWith case_ 1
+    TD.Id name
+      : TD.Op Op.Colon
+      : _ ->
+        makeWith (label name) 2
+    TD.Type ty
+      : TD.Id name
+      : TD.DelimOpen Dl.SqBr
+      : TD.IntLiteral (Constant len_ty len)
+      : TD.DelimClose Dl.SqBr
+      : _
+        | Ty.isInteger len_ty ->
+            makeWith (varStatement (Ty.Array ty len) name) 5
+    TD.Type ty
+      : TD.Id name
+      : TD.DelimOpen Dl.SqBr
+      : TD.DelimClose Dl.SqBr
+      : _ ->
+        makeWith (varStatement (Ty.ArrayNoHint ty) name) 4
+    TD.Type ty
+      : TD.Id name
+      : _ ->
+        makeWith (varStatement ty name) 2
+    _ : _ -> do
+      tokens' <- collectUntil TD.Semicolon
+      let expression = expr tokens'
+      return $ Statement (SD.Expr expression) (Expr.tks expression)
   where
-    make = withSplitTpl tokens
-    makeWith = withSplit tokens
+    make :: ([Token] -> Statement) -> Int -> State [Token] Statement
+    make st skip = do
+      tokens <- get
+      let taken = take skip tokens
+      modify $ drop skip
+      return $ st taken
 
-if_ :: [Token] -> [Token] -> (Statement, [Token])
-if_ taken tokens =
-  let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
-      (then_, rest'') = statement rest'
-      taken' = taken ++ cond ++ St.tks then_
-   in case map Token.def rest'' of
-        TD.Else : _ ->
-          let (else_, rest''') = statement (drop 1 rest'')
-           in (Statement (SD.If (expr cond) then_ (Just else_)) (taken' ++ take 1 rest'' ++ St.tks else_), rest''')
-        _ -> (Statement (SD.If (expr cond) then_ Nothing) taken', rest'')
+    makeWith :: ([Token] -> State [Token] Statement) -> Int -> State [Token] Statement
+    makeWith makeF skip = do
+      tokens <- get
+      let taken = take skip tokens
+      modify $ drop skip
+      makeF taken
 
-switch :: [Token] -> [Token] -> (Statement, [Token])
-switch taken tokens =
-  let (eval, rest') = collectUntilDelimiter Dl.Pr tokens
-      (body, rest'') = statement rest'
-   in (Statement (SD.Switch (expr eval) body) (taken ++ eval ++ St.tks body), rest'')
+if_ :: [Token] -> State [Token] Statement
+if_ taken = do
+  cond <- collectUntilDelimiter Dl.Pr
+  then_ <- statement
+  let taken' = taken ++ cond ++ St.tks then_
+  tokens <- get
+  case map Token.def tokens of
+    TD.Else : _ -> do
+      modify $ drop 1
+      else_ <- statement
+      return $ Statement (SD.If (expr cond) then_ (Just else_)) (taken' ++ take 1 tokens ++ St.tks else_)
+    _ -> return $ Statement (SD.If (expr cond) then_ Nothing) taken'
 
-case_ :: [Token] -> [Token] -> (Statement, [Token])
-case_ taken tokens = case map Token.def tokens of
-  TD.IntLiteral constant@(Constant ty _)
-    : TD.Op Op.Colon
-    : _ ->
-      let stDef =
-            if Ty.isInteger ty
-              then SD.Case constant
-              else SD.Invalid $ "Invalid type for case constant: " ++ show ty
-       in (Statement stDef (taken ++ take 2 tokens), drop 2 tokens)
-  _ ->
-    let (tks, rest) = collectUntil (TD.Op Op.Colon) tokens
-     in (Statement (SD.Invalid $ "Invalid case constant: " ++ show tks) (taken ++ tks), rest)
+switch :: [Token] -> State [Token] Statement
+switch taken = do
+  eval <- collectUntilDelimiter Dl.Pr
+  body <- statement
+  return $ Statement (SD.Switch (expr eval) body) (taken ++ eval ++ St.tks body)
 
-while :: [Token] -> [Token] -> (Statement, [Token])
-while taken tokens =
-  let (cond, rest') = collectUntilDelimiter Dl.Pr tokens
-      (body, rest'') = statement rest'
-   in (Statement (SD.While (expr cond) body) (taken ++ cond ++ St.tks body), rest'')
+case_ :: [Token] -> State [Token] Statement
+case_ taken = do
+  tokens <- get
+  case map Token.def tokens of
+    TD.IntLiteral constant@(Constant ty _)
+      : TD.Op Op.Colon
+      : _ -> do
+        modify $ drop 2
+        let stDef =
+              if Ty.isInteger ty
+                then SD.Case constant
+                else SD.Invalid $ "Invalid type for case constant: " ++ show ty
+        return $ Statement stDef (taken ++ take 2 tokens)
+    _ -> do
+      tks <- collectUntil (TD.Op Op.Colon)
+      return $ Statement (SD.Invalid $ "Invalid case constant: " ++ show tks) (taken ++ tks)
 
-doWhile :: [Token] -> [Token] -> (Statement, [Token])
-doWhile taken tokens =
-  let (body, rest) = statement tokens
-   in case map Token.def rest of
-        TD.While : ((TD.DelimOpen Dl.Pr)) : _ ->
-          let (cond, rest') = collectUntilDelimiter Dl.Pr (drop 2 rest)
-           in case Token.def $ head rest' of
-                TD.Semicolon ->
-                  (Statement (SD.DoWhile body $ expr cond) (taken ++ St.tks body ++ take 1 rest ++ cond), drop 1 rest')
-                _ ->
-                  (Statement (SD.Invalid "Expected semicolon") (taken ++ St.tks body ++ take 1 rest ++ cond), rest)
-        TD.While : _ -> (Statement (SD.Invalid "Expected (") (taken ++ St.tks body ++ take 1 rest), drop 1 rest)
-        _ -> (Statement (SD.Invalid "Expected while (") (taken ++ St.tks body), rest)
+while :: [Token] -> State [Token] Statement
+while taken = do
+  cond <- collectUntilDelimiter Dl.Pr
+  body <- statement
+  return $ Statement (SD.While (expr cond) body) (taken ++ cond ++ St.tks body)
 
-for :: [Token] -> [Token] -> (Statement, [Token])
-for taken tokens =
-  let (decl, rest') = collectUntil TD.Semicolon tokens
-      (cond, rest'') = collectUntil TD.Semicolon rest'
-      (incr, rest''') = collectUntilDelimiter Dl.Pr rest''
-      (body, rest'''') = statement rest'''
-      (stDef, rest''''') = case map Token.def decl of
-        TD.Type ty : TD.Id name : _ ->
-          let (declSt, rest'''''') = varStatement ty name (take 2 decl) (drop 2 decl)
-           in ( SD.ForVar
-                  declSt
-                  (expr <$> listToMaybeList cond)
-                  (expr <$> listToMaybeList incr)
-                  body,
-                rest'''' ++ rest''''''
-              )
-        _ ->
-          ( SD.For
-              (expr <$> listToMaybeList decl)
-              (expr <$> listToMaybeList cond)
-              (expr <$> listToMaybeList incr)
-              body,
-            rest''''
-          )
-   in ( Statement stDef (taken ++ decl ++ cond ++ incr ++ St.tks body),
-        rest'''''
-      )
+doWhile :: [Token] -> State [Token] Statement
+doWhile taken = do
+  body <- statement
+  tokens <- get
+  case map Token.def tokens of
+    TD.While : TD.DelimOpen Dl.Pr : _ -> do
+      modify $ drop 2
+      cond <- collectUntilDelimiter Dl.Pr
+      tokens' <- get
+      case map Token.def $ take 1 tokens' of
+        TD.Semicolon : _ -> do
+          modify $ drop 1
+          return $ Statement (SD.DoWhile body $ expr cond) (taken ++ St.tks body ++ take 1 tokens ++ cond)
+        _ -> return $ Statement (SD.Invalid "Expected semicolon") (taken ++ St.tks body ++ take 1 tokens ++ cond)
+    TD.While : _ -> return $ Statement (SD.Invalid "Expected (") (taken ++ St.tks body ++ take 1 tokens)
+    _ -> return $ Statement (SD.Invalid "Expected while (") (taken ++ St.tks body)
 
-block :: [Token] -> [Token] -> (Statement, [Token])
-block taken tokens =
-  let (tokens', rest') = collectUntilDelimiter Dl.Br tokens
-      sts = statementList tokens'
-   in (Statement (SD.Block sts) (taken ++ tokens'), rest')
+for :: [Token] -> State [Token] Statement
+for taken = do
+  decl <- collectUntil TD.Semicolon
+  cond <- collectUntil TD.Semicolon
+  incr <- collectUntilDelimiter Dl.Pr
+  body <- statement
+  stDef <- case map Token.def decl of
+    TD.Type ty : TD.Id name : _ -> do
+      modify $ drop 2
+      declSt <- varStatement ty name (take 2 decl)
+      return
+        ( SD.ForVar
+            declSt
+            (expr <$> listToMaybeList cond)
+            (expr <$> listToMaybeList incr)
+            body
+        )
+    _ ->
+      return
+        ( SD.For
+            (expr <$> listToMaybeList decl)
+            (expr <$> listToMaybeList cond)
+            (expr <$> listToMaybeList incr)
+            body
+        )
+  return $ Statement stDef (taken ++ decl ++ cond ++ incr ++ St.tks body)
 
-return_ :: [Token] -> [Token] -> (Statement, [Token])
-return_ taken tokens =
-  case collectUntil TD.Semicolon tokens of
-    ([], rest') -> (Statement (SD.Return Nothing) taken, rest')
-    (tokens', rest') -> (Statement (SD.Return (Just (expr tokens'))) (taken ++ tokens'), rest')
+block :: [Token] -> State [Token] Statement
+block taken = do
+  tokens <- collectUntilDelimiter Dl.Br
+  sts <- statementList
+  return $ Statement (SD.Block sts) (taken ++ tokens)
 
-label :: Id -> [Token] -> [Token] -> (Statement, [Token])
-label name taken tokens_ = case map Token.def tokens of
-  TD.Id _ : TD.Op Op.Colon : _ -> (Statement (SD.Labeled name (Statement SD.Empty [tokens !! 1])) (taken ++ take 2 tokens), tokens_)
-  _ ->
-    let (st, rest') = statement tokens
-     in (Statement (SD.Labeled name st) tokens, rest')
-  where
-    tokens = Token.filterNL tokens_
+return_ :: [Token] -> State [Token] Statement
+return_ taken = do
+  tokens <- collectUntil TD.Semicolon
+  case tokens of
+    [] -> return $ Statement (SD.Return Nothing) taken
+    _ -> return $ Statement (SD.Return (Just (expr tokens))) (taken ++ tokens)
 
-varStatement :: Type -> Id -> [Token] -> [Token] -> (Statement, [Token])
-varStatement ty name taken tokens_ =
-  ( case map Token.def tokens of
-      [] -> Statement (SD.Var ty name Nothing) taken
-      TD.Op Op.Assign : _ -> Statement (SD.Var ty name (Just $ expr $ drop 1 tokens)) (taken ++ tokens)
-      _ -> Statement (SD.Invalid ("Invalid assignment : " ++ show tokens)) (taken ++ tokens),
-    rest
-  )
-  where
-    (tokens, rest) = collectUntil TD.Semicolon tokens_
+label :: Id -> [Token] -> State [Token] Statement
+label name taken = do
+  unfiltered <- get
+  let tokens = Token.filterNL unfiltered
+  case map Token.def tokens of
+    TD.Id _ : TD.Op Op.Colon : _ -> return $ Statement (SD.Labeled name (Statement SD.Empty [tokens !! 1])) (taken ++ take 2 tokens)
+    _ -> do
+      st <- statement
+      return $ Statement (SD.Labeled name st) tokens
+
+varStatement :: Type -> Id -> [Token] -> State [Token] Statement
+varStatement ty name taken = do
+  statementTks <- collectUntil TD.Semicolon
+  case map Token.def statementTks of
+    [] -> return $ Statement (SD.Var ty name Nothing) taken
+    TD.Op Op.Assign : _ -> return $ Statement (SD.Var ty name (Just $ expr $ drop 1 statementTks)) (taken ++ statementTks)
+    _ -> return $ Statement (SD.Invalid ("Invalid assignment : " ++ show statementTks)) (taken ++ statementTks)
 
 exprList :: [Token] -> [Expr]
 exprList tokens = case map Token.def tokens of
   [] -> []
   TD.Op Op.Comma : _ -> exprList (drop 1 tokens)
-  _ -> let (ex, tks) = collectUntil (TD.Op Op.Comma) tokens in expr ex : exprList tks
+  _ -> let (ex, tks) = runState (collectUntil (TD.Op Op.Comma)) tokens in expr ex : exprList tks
 
 expr :: [Token] -> Expr
 expr tokens = case map Token.def tokens of
@@ -334,7 +361,7 @@ expr tokens = case map Token.def tokens of
     let exs = exprList (collectArrayDecl tks)
      in Expr (ED.ArrayDecl exs) (tk ++ concatMap Expr.tks exs)
   TD.DelimOpen Dl.Pr : _ ->
-    let (pr, rest) = collectParenthese tks
+    let (pr, rest) = runState collectParenthese tks
      in exprNext (tk ++ pr) (ED.Parenthese (expr pr)) rest
   _ ->
     Expr (ED.Invalid ("Invalid expression : " ++ show tokens)) tokens
@@ -355,16 +382,16 @@ exprNext taken ex tokens = case map Token.def tokens of
     tks = taken ++ take 1 tokens
 
 collectArrayDecl :: [Token] -> [Token]
-collectArrayDecl tokens = let (tokens', _) = collectUntilDelimiter Dl.Br tokens in tokens'
+collectArrayDecl = evalState (collectUntilDelimiter Dl.Br)
 
-collectParenthese :: [Token] -> ([Token], [Token])
-collectParenthese tokens = let (pr, rest) = collectUntilDelimiter Dl.Pr tokens in (pr, rest)
+collectParenthese :: State [Token] [Token]
+collectParenthese = collectUntilDelimiter Dl.Pr
 
 collectArguments :: [Token] -> [Token]
-collectArguments tokens = let (tokens', _) = collectUntilDelimiter Dl.Pr tokens in tokens'
+collectArguments = evalState (collectUntilDelimiter Dl.Pr)
 
 collectIndex :: [Token] -> [Token]
-collectIndex tokens = let (tokens', _) = collectUntilDelimiter Dl.SqBr tokens in tokens'
+collectIndex = evalState (collectUntilDelimiter Dl.SqBr)
 
 binop :: [Token] -> ExprDef -> Op -> Expr -> Expr
 binop lTks leftDef op right = case right of
@@ -373,71 +400,81 @@ binop lTks leftDef op right = case right of
         Expr (ED.Binop (binop lTks leftDef op r_left) r_op r_right) (lTks ++ rTks)
   Expr _ rTks -> Expr (ED.Binop (Expr leftDef lTks) op right) (lTks ++ rTks)
 
-collectParameters :: [Token] -> (Either [(Type, Id)] String, [Token], [Token])
-collectParameters tokens = case tokens of
-  [] -> (Left [], [], [])
-  _ ->
-    let (tokens', rest) = collectUntilDelimiter Dl.Pr tokens
-        (params, tokens'') = makeList tokens'
-     in (params, tokens'', rest)
+collectParameters :: State [Token] (Either [(Type, Id)] String, [Token])
+collectParameters = do
+  tokens <- get
+  case tokens of
+    [] -> return (Left [], [])
+    _ -> do
+      tokens' <- collectUntilDelimiter Dl.Pr
+      let (params, tokens'') = evalState makeList tokens'
+       in return (params, tokens'')
   where
-    makeList :: [Token] -> (Either [(Type, Id)] String, [Token])
-    makeList tokens''' = case map Token.def tokens''' of
-      [] -> (Left [], [])
-      [TD.Type ty, TD.Id name] -> (Left [(ty, name)], take 2 tokens''')
-      TD.Type ty : TD.Id name : TD.Op Op.Comma : _ -> withSplit tokens''' (next (ty, name)) 3
-      TD.Type _ : TD.Id _ : tk : _ -> (Right $ "Expected , or ) but got " ++ show tk, take 2 tokens''')
-      _ -> (Right $ "Invalid parameters : " ++ show tokens''', [])
+    makeList :: State [Token] (Either [(Type, Id)] String, [Token])
+    makeList = do
+      tokens <- get
+      case map Token.def tokens of
+        [] -> return (Left [], [])
+        [TD.Type ty, TD.Id name] -> return (Left [(ty, name)], take 2 tokens)
+        TD.Type ty : TD.Id name : TD.Op Op.Comma : _ -> do
+          modify $ drop 3
+          (mparams, tks) <- makeList
+          case mparams of
+            Left params -> return (Left $ (ty, name) : params, take 2 tokens ++ tks)
+            Right err -> return (Right err, tks)
+          -- withSplit tokens''' (next (ty, name)) 3
+        TD.Type _ : TD.Id _ : tk : _ -> return (Right $ "Expected , or ) but got " ++ show tk, take 2 tokens)
+        _ -> return (Right $ "Invalid parameters : " ++ show tokens, [])
 
-    next :: (Type, Id) -> [Token] -> [Token] -> (Either [(Type, Id)] String, [Token])
-    next param taken tokens''' = case makeList tokens''' of
-      (Left params, tokens'''') -> (Left (param : params), taken ++ tokens'''')
-      (Right err, tokens'''') -> (Right err, tokens'''')
-
-func :: Type -> Id -> [Token] -> [Token] -> (Declaration, [Token])
-func ty name taken tokens =
-  case map Token.def rest of
-    TD.Semicolon : _ ->
+func :: Type -> Id -> [Token] -> State [Token] Declaration
+func ty name taken = do
+  (parametersResult, paramTks) <- collectParameters
+  tokens <- get
+  case map Token.def tokens of
+    TD.Semicolon : _ -> do
+      modify $ drop 1
       case parametersResult of
-        Left parameters -> (Declaration (funcDef ty name parameters) (taken ++ paramTks ++ take 1 rest), drop 1 rest)
-        Right err -> (Declaration (DD.Invalid err) (taken ++ paramTks ++ take 1 rest), drop 1 rest)
-    TD.DelimOpen Dl.Br : _ ->
-      let (body, rest'') = collectFuncBody (drop 1 rest)
-       in case parametersResult of
-            Left parameters ->
-              (Declaration (funcDec ty name parameters body) (taken ++ paramTks ++ body), rest'')
-            Right err -> (Declaration (DD.Invalid err) (taken ++ paramTks), rest'')
-    _ -> (Declaration (DD.Invalid "Expected ; or {") (taken ++ paramTks), rest)
-  where
-    (parametersResult, paramTks, rest) = collectParameters tokens
+        Left parameters -> return $ Declaration (funcDef ty name parameters) (taken ++ paramTks)
+        Right err -> return $ Declaration (DD.Invalid err) (taken ++ paramTks)
+    TD.DelimOpen Dl.Br : _ -> do
+      modify $ drop 1
+      body <- collectFuncBody
+      case parametersResult of
+        Left parameters -> return $ Declaration (funcDec ty name parameters body) (taken ++ paramTks ++ body)
+        Right err -> return $ Declaration (DD.Invalid err) (taken ++ paramTks ++ body)
+    _ -> return $ Declaration (DD.Invalid "Expected ; or {") (taken ++ paramTks)
 
 funcDef :: Type -> Id -> [(Type, Id)] -> DeclarationDef
 funcDef = DD.FuncDef
 
-collectFuncBody :: [Token] -> ([Token], [Token])
+collectFuncBody :: State [Token] [Token]
 collectFuncBody = collectUntilDelimiter Dl.Br
 
 funcDec :: Type -> Id -> [(Type, Id)] -> [Token] -> DeclarationDef
-funcDec ty name params body = DD.FuncDec ty name params (statementList body)
+funcDec ty name params body = DD.FuncDec ty name params $ evalState statementList body
 
-collectStructFields :: [Token] -> ([Token], [Token])
+collectStructFields :: State [Token] [Token]
 collectStructFields = collectUntilDelimiter Dl.Br
 
-struct :: Maybe Id -> [Token] -> [Token] -> (Declaration, [Token])
-struct name taken tokens =
-  let (tokens', rest') = collectStructFields tokens
-   in case map Token.def rest' of
-        TD.Semicolon : _ -> case structFields tokens' of
-          Left fields -> (Declaration (DD.Struct name fields) (taken ++ tokens' ++ take 1 rest'), drop 1 rest')
-          Right err -> (Declaration (DD.Invalid err) (taken ++ tokens' ++ take 1 rest'), drop 1 rest')
-        [] -> (Declaration (DD.Invalid "Expected semicolon") (taken ++ tokens'), rest')
-        tk : _ -> (Declaration (DD.Invalid ("Expected semicolon, got " ++ show tk)) (taken ++ tokens'), rest')
+struct :: Maybe Id -> [Token] -> State [Token] Declaration
+struct name taken = do
+  structTks <- collectStructFields
+  tokens <- get
+  def <- case map Token.def tokens of
+    TD.Semicolon : _ -> do
+      modify $ drop 1
+      case structFields structTks of
+        Left fields -> return $ DD.Struct name fields
+        Right err -> return $ DD.Invalid err
+    [] -> return $ DD.Invalid "Expected semicolon"
+    tk : _ -> return $ DD.Invalid ("Expected semicolon, got " ++ show tk)
+  return $ Declaration def (taken ++ structTks)
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = case Token.filterNL tokens of
   [] -> Left []
   tokens' ->
-    let (field, rest) = collectUntil TD.Semicolon tokens'
+    let (field, rest) = runState (collectUntil TD.Semicolon) tokens'
      in case map Token.def field of
           [TD.Type ty, TD.Id name] -> next (ty, name) rest
           tk : _ -> Right $ "Unexpected token : " ++ show tk
@@ -447,24 +484,28 @@ structFields tokens = case Token.filterNL tokens of
       Left fields -> Left (field : fields)
       Right err -> Right err
 
-enum :: Maybe Id -> Type -> [Token] -> [Token] -> (Declaration, [Token])
-enum name ty taken tokens =
-  let (tokens', rest') = collectEnumVariants tokens
-   in case map Token.def rest' of
-        TD.Semicolon : _ -> case enumVariants tokens' of
-          Left variants -> (Declaration (DD.Enum name ty variants) (taken ++ tokens' ++ take 1 rest'), drop 1 rest')
-          Right err -> (Declaration (DD.Invalid err) (taken ++ tokens' ++ take 1 rest'), drop 1 rest')
-        [] -> (Declaration (DD.Invalid "Expected semicolon") (taken ++ tokens'), rest')
-        tk : _ -> (Declaration (DD.Invalid ("Expected semicolon, got " ++ show tk)) (taken ++ tokens'), rest')
+enum :: Maybe Id -> Type -> [Token] -> State [Token] Declaration
+enum name ty taken = do
+  enumTks <- collectEnumVariants
+  tokens <- get
+  def <- case map Token.def tokens of
+    TD.Semicolon : _ -> do
+      modify $ drop 1
+      case enumVariants enumTks of
+        Left variants -> return $ DD.Enum name ty variants
+        Right err -> return $ DD.Invalid err
+    [] -> return $ DD.Invalid "Expected semicolon"
+    tk : _ -> return $ DD.Invalid ("Expected semicolon, got " ++ show tk)
+  return $ Declaration def (taken ++ enumTks)
 
-collectEnumVariants :: [Token] -> ([Token], [Token])
+collectEnumVariants :: State [Token] [Token]
 collectEnumVariants = collectUntilDelimiter Dl.Br
 
 enumVariants :: [Token] -> Either [(Id, Maybe Expr)] String
 enumVariants tokens = case Token.filterNL tokens of
   [] -> Left []
   tokens' ->
-    let (variant, rest) = collectUntil (TD.Op Op.Comma) tokens'
+    let (variant, rest) = runState (collectUntil (TD.Op Op.Comma)) tokens'
      in case map Token.def variant of
           TD.Id name : TD.Op Op.Assign : _ -> next (name, Just $ expr (drop 2 variant)) rest
           [TD.Id name] -> next (name, Nothing) rest

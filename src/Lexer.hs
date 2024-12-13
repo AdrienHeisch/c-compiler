@@ -1,15 +1,15 @@
 module Lexer (Lexer.lex) where
 
 import CharClasses qualified as CC
-import Cursor (Cursor (..), CursorOps(..))
+import Cursor (Cursor (..), CursorOps (..))
 import Cursor qualified
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Identifier (Id (Id))
 import Op qualified
-import Token (Token(..))
-import Token qualified as TD (TokenDef(..))
+import Token (Token (..))
 import Token qualified
+import Token qualified as TD (TokenDef (..))
 
 lex :: Text -> [Token]
 lex text = reduceTokens $ lexFrom text 0
