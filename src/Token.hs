@@ -1,4 +1,4 @@
-module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef, defToStr, filterNil, filterNL, collectUntil, collectUntilDelimiter, parseList) where
+module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef, defToStr, filterNil, filterNL, collectUntil, collectUntilDelimiter, parseList, parseListWithInner) where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
@@ -295,4 +295,23 @@ parseList end parser = do
       el <- parser
       modify $ drop 1
       els <- parseList end parser
+      return $ el : els
+
+parseListWithInner :: TokenDef -> Delimiter -> State [Token] a -> State [Token] [a]
+parseListWithInner end del parser = go (0 :: Int)
+  where
+    go depth = do
+      tokens <- get
+      case tokens of
+        [] -> return []
+        (tk : _)
+          | Token.def tk == end && depth == 0 -> do modify $ drop 1; go 0
+          | Token.def tk == DelimClose del && depth == 0 -> do modify $ drop 1; return []
+          | Token.def tk == DelimClose del -> next (depth - 1)
+          | Token.def tk == DelimOpen del -> next (depth + 1)
+          | otherwise -> next depth
+    
+    next depth = do
+      el <- parser
+      els <- go depth
       return $ el : els

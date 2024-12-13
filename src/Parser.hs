@@ -17,7 +17,7 @@ import Op qualified
 import Statement (Statement (Statement))
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
-import Token (Token (Token), collectUntil, collectUntilDelimiter, parseList)
+import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner)
 import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
@@ -26,7 +26,8 @@ import Utils (listToMaybeList)
 
 parse :: [Token] -> [Declaration]
 parse tokens =
-  let decls = evalState declarations (static tokens)
+  let filtered = Token.filterNL tokens
+      decls = evalState declarations (static filtered)
       !_ = case Declaration.errs decls of
         [] -> ()
         tkErrs -> error $ "Parser errors :\n" ++ intercalate "\n" tkErrs
@@ -97,10 +98,6 @@ declarations = do
       : TD.DelimOpen Dl.Pr
       : _ ->
         go (func ty name) 3
-    TD.NL
-      : _ -> do
-        modify $ drop 1
-        declarations
     tkDef
       : _ -> do
         modify $ drop 1
@@ -118,7 +115,7 @@ declarations = do
 
 statementList :: State [Token] [Statement]
 -- FIXME why NL and not ; ?
-statementList = parseList TD.NL statement
+statementList = parseListWithInner TD.Semicolon Dl.Br statement
 
 statement :: State [Token] Statement
 statement = do
@@ -126,9 +123,6 @@ statement = do
   case map Token.def tokens of
     [] ->
       make (Statement SD.Empty) 0
-    TD.NL
-      : _ ->
-        make (Statement SD.Empty) 1
     TD.Semicolon
       : _ ->
         make (Statement SD.Empty) 1
@@ -346,8 +340,6 @@ expr :: [Token] -> Expr
 expr tokens = case map Token.def tokens of
   [] ->
     Expr (ED.Invalid "Empty expression") tokens
-  TD.NL : _ ->
-    expr tks
   TD.IntLiteral constant : _
     | Ty.isInteger $ Constant.ty constant ->
         exprNext tk (ED.IntLiteral constant) tks
