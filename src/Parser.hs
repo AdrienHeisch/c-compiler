@@ -252,9 +252,14 @@ case_ taken = do
 
 while :: [Token] -> State [Token] Statement
 while taken = do
-  cond <- collectUntilDelimiter Dl.Pr
-  body <- statement
-  return $ Statement (SD.While (expr cond) body) (taken ++ cond ++ St.tks body)
+  tokens <- get
+  case map Token.def tokens of
+    TD.DelimOpen Dl.Pr : _ -> do
+      modify $ drop 1
+      cond <- collectUntilDelimiter Dl.Pr
+      body <- statement
+      return $ Statement (SD.While (expr cond) body) (taken ++ cond ++ St.tks body)
+    _ -> return $ Statement (SD.Invalid "Expected (") taken
 
 doWhile :: [Token] -> State [Token] Statement
 doWhile taken = do
