@@ -308,7 +308,7 @@ for taken = do
 block :: [Token] -> State [Token] Statement
 block taken = do
   tokens <- collectUntilDelimiter Dl.Br
-  sts <- statementList
+  let sts = evalState statementList tokens
   return $ Statement (SD.Block sts) (taken ++ tokens)
 
 return_ :: [Token] -> State [Token] Statement
