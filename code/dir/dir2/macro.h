@@ -1,1 +1,1 @@
-#define ADD(x, y) add(x, y)
+#define ADD(x, y) x+y
