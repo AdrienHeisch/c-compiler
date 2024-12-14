@@ -15,13 +15,17 @@ import Token (Token (..))
 import Token qualified (collectUntil, collectUntilDelimiter, defToStr, errs, filterNil)
 import Token qualified as TD (TokenDef (..))
 import Type qualified as Ty (Type (..))
-import Utils (genErrs, mtransform)
+import Utils (Display(display), genErrs, mtransform)
 
 data Directive
   = Include Bool String
   | Define Id [Id] [Token]
   | Invalid String
   deriving (Show)
+
+instance Display Directive where
+  display :: Directive -> String
+  display = show
 
 errs :: [Directive] -> [String]
 errs = genErrs isInvalid

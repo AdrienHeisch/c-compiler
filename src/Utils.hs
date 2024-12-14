@@ -8,8 +8,8 @@ mtransform st = do
   put newState
   return values
 
-genErrs :: (Show a) => (a -> Bool) -> [a] -> [String]
-genErrs f = map show . filter f
+genErrs :: (Display a) => (a -> Bool) -> [a] -> [String]
+genErrs f = map display . filter f
 
 listToMaybeList :: [a] -> Maybe [a]
 listToMaybeList [] = Nothing

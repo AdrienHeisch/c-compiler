@@ -3,10 +3,10 @@ module Expr (Expr (..), ExprDef (..), eval, errs) where
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Identifier (Id)
 import Op (Op)
-import Token (Token)
+import Token (Token, foldCrs)
 import Type (Type)
 import Type qualified (Type (..))
-import Utils (Display (..), genErrs)
+import Utils (Display (..))
 
 data Expr = Expr {def :: ExprDef, tks :: [Token]}
   deriving (Show)
@@ -14,12 +14,6 @@ data Expr = Expr {def :: ExprDef, tks :: [Token]}
 instance Display Expr where
   display :: Expr -> String
   display = display . def
-
-errs :: [Expr] -> [String]
-errs = genErrs isInvalid
-  where
-    isInvalid (Expr (Invalid _) _) = True
-    isInvalid _ = False
 
 eval :: Expr -> Type
 eval expr = case Expr.def expr of
@@ -65,3 +59,20 @@ instance Display ExprDef where
     Call ex args -> "Call (" ++ unwords [display ex, display args] ++ ")"
     Parenthese ex -> "Parenthese (" ++ display ex ++ ")"
     _ -> show expr
+
+errs :: [Expr] -> [String]
+errs = concatMap err
+  where
+    err :: Expr -> [String]
+    err expr = case def expr of
+    -- isInvalid (Expr (Invalid _) _) = True
+    -- isInvalid _ = False
+      ArrayDecl exs -> errs exs
+      UnopPre _ ex -> err ex
+      UnopPost _ ex -> err ex
+      Binop left _ right -> errs [left, right]
+      Ternary ter_cond ter_then ter_else -> errs [ter_cond, ter_then, ter_else]
+      Call ex args -> err ex ++ errs args
+      Parenthese ex -> err ex
+      Invalid str -> [str ++ " at " ++ show (foldCrs $ tks expr)]
+      _ -> []

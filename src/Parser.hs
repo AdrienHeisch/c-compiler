@@ -22,7 +22,7 @@ import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
-import Utils (listToMaybeList)
+import Utils (listToMaybeList, Display (display))
 
 parse :: [Token] -> [Declaration]
 parse tokens =
@@ -361,7 +361,7 @@ expr tokens = case map Token.def tokens of
     let (pr, rest) = runState collectParenthese tks
      in exprNext (tk ++ pr) (ED.Parenthese (expr pr)) rest
   _ ->
-    Expr (ED.Invalid ("Invalid expression : " ++ show tokens)) tokens
+    Expr (ED.Invalid ("Invalid expression : " ++ display tokens)) tokens
   where
     (tk, tks) = splitAt 1 tokens
 
@@ -374,7 +374,7 @@ exprNext taken ex tokens = case map Token.def tokens of
   (TD.DelimOpen Dl.Pr) : _ ->
     let args = collectArguments (tail tokens)
      in Expr (ED.Call (Expr ex taken) (exprList args)) (taken ++ take (1 + length args) tokens)
-  _ -> Expr (ED.Invalid ("Invalid follow expression for " ++ show ex ++ " : " ++ show tokens)) tokens
+  _ -> Expr (ED.Invalid ("Invalid follow expression for " ++ display ex ++ " : " ++ display tokens)) tokens
   where
     tks = taken ++ take 1 tokens
 
