@@ -124,7 +124,7 @@ makeDef str = case str of
   "alignof" -> keywordUnimplErr str
   "typeof" -> keywordUnimplErr str
   "typeof_unqual" -> keywordUnimplErr str
-  "sizeof" -> Op Op.Sizeof
+  "sizeof" -> keywordUnimplErr str
   "!" -> Op Op.Not
   "==" -> Op Op.Equal
   "!=" -> Op Op.NotEqual
@@ -224,8 +224,8 @@ isIdentifier (c : cs) = c `elem` CC.identifier && isIdentifier cs
 
 isWhitespace :: String -> Bool
 isWhitespace "" = True
-isWhitespace (' ' : cs) = isWhitespace cs
-isWhitespace _ = False
+isWhitespace (c : "") = c `elem` CC.whitespace
+isWhitespace (c : cs) = c `elem` CC.whitespace && isWhitespace cs
 
 isNewLine :: String -> Bool
 isNewLine "" = False

@@ -54,14 +54,14 @@ getCursor text idx = go (Cursor idx 1)
   where
     go :: Cursor -> Cursor
     go cursor
-      | first == ' ' = getWhile cursor (== ' ')
       | first == '\n' = getWhile cursor (== '\n')
       | first == '"' = getUntil cursor '"'
       | first == '\'' = getUntil cursor '\''
       | first == '#' = getWhile cursor $ \c -> c `elem` CC.identifier
+      | first `elem` CC.whitespace = getWhile cursor $ \c -> c `elem` CC.whitespace
       | first `elem` CC.identifierStart = getWhile cursor $ \c -> c `elem` CC.identifier
       | first `elem` CC.digits = getWhile cursor $ \c -> c `elem` CC.float
-      | first `elem` CC.punctuators = getWhile cursor $ \c -> c `elem` CC.punctuators
+      | first `elem` CC.punctuators = makePunctuator cursor
       | otherwise = cursor
 
     first :: Char
@@ -87,6 +87,15 @@ getCursor text idx = go (Cursor idx 1)
     getWhile cursor predicate =
       case peek cursor of
         Just c | predicate c -> getWhile (Cursor.expand cursor) predicate
+        _ -> cursor
+
+    makePunctuator :: Cursor -> Cursor
+    makePunctuator cursor =
+      case peek cursor of
+        Just c
+          | let str = readCursor text cursor ++ [c]
+             in Op.strIsOperator str || str == "/*" || str == "//" ->
+              makePunctuator (Cursor.expand cursor)
         _ -> cursor
 
 readCursor :: Text -> Cursor -> String

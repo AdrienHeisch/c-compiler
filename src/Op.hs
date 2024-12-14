@@ -1,4 +1,4 @@
-module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, toStr) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr) where
 
 data Op
   = Not
@@ -170,6 +170,50 @@ precedence op = case op of
   BitOrAssign -> 11
   Comma -> 12
   _ -> 99
+
+strIsOperator :: String -> Bool
+strIsOperator str = str `elem` allowed
+  where
+    allowed =
+      [ "!",
+        "==",
+        "!=",
+        ">",
+        ">=",
+        "<",
+        "<=",
+        "&&",
+        "||",
+        "%",
+        "%=",
+        "+",
+        "+=",
+        "-",
+        "-=",
+        "*",
+        "*=",
+        "/",
+        "/=",
+        "++",
+        "--",
+        "~",
+        "&",
+        "&=",
+        "|",
+        "|=",
+        "^",
+        "^=",
+        "<<",
+        "<<=",
+        ">>",
+        ">>=",
+        "->",
+        ".",
+        "=",
+        ",",
+        "?",
+        ":"
+      ]
 
 toStr :: Op -> String
 toStr op = case op of

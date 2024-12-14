@@ -1,5 +1,8 @@
 module CharClasses where
 
+whitespace :: [Char]
+whitespace = [' ', '\t']
+
 digits :: [Char]
 digits = ['0' .. '9']
 
