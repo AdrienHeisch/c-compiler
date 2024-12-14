@@ -4,9 +4,6 @@ import Constant (Constant (Constant))
 import Context (Context, addVar, addVars, getLabel, getVar)
 import Context qualified (new)
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
-import Declaration (Declaration)
-import Declaration qualified (Declaration (..))
-import Declaration qualified as DD (DeclarationDef (..))
 import Expr (Expr, Expr(Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
@@ -19,16 +16,16 @@ import Statement qualified
 import Statement qualified as SD (StatementDef (..))
 import Type (Type (Int))
 
-compile :: [Declaration] -> Program
+compile :: [Statement] -> Program
 compile decls = Program $ evalState (declarations decls) (Context.new Nothing)
 
-declarations :: [Declaration] -> State Context [Instruction]
+declarations :: [Statement] -> State Context [Instruction]
 declarations decls = do
-  case map Declaration.def decls of
+  case map Statement.def decls of
     [] -> return []
-    DD.FuncDec ty name params body : _ -> do ins <- funcDef ty name params body; go ins
+    SD.FuncDec ty name params body : _ -> do ins <- funcDef ty name params body; go ins
     -- DD.FuncDef ty name params : _ -> do ins <- funcDef ty name params; go ins
-    DD.Invalid str : _ -> error $ "Invalid definition : " ++ str
+    SD.Invalid str : _ -> error $ "Invalid definition : " ++ str
     _ -> error $ "Declaration not implemented yet : " ++ show (head decls)
   where
     go ins = do

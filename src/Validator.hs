@@ -1,6 +1,6 @@
 module Validator (validate) where
-import Declaration (Declaration)
+import Statement (Statement)
 
 -- TODO program validation
-validate :: [Declaration] -> Bool
+validate :: [Statement] -> Bool
 validate _ = True

@@ -4,9 +4,6 @@ import Constant (Constant (..))
 import Control.Monad.State.Lazy (State, evalState, get, modify, runState)
 import Cursor (CursorOps (..))
 import Data.List (intercalate)
-import Declaration (Declaration (Declaration), DeclarationDef)
-import Declaration qualified (errs)
-import Declaration qualified as DD (DeclarationDef (..))
 import Delimiter qualified as Dl
 import Expr (Expr (Expr), ExprDef)
 import Expr qualified (Expr (..))
@@ -14,7 +11,8 @@ import Expr qualified as ED (ExprDef (..))
 import Identifier (Id)
 import Op (Op)
 import Op qualified
-import Statement (Statement (Statement))
+import Statement (Statement (Statement), StatementDef)
+import Statement qualified (isTopLevel, errs)
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner)
@@ -24,14 +22,23 @@ import Type (Type)
 import Type qualified as Ty
 import Utils (listToMaybeList, Display (display))
 
-parse :: [Token] -> [Declaration]
+parse :: [Token] -> [Statement]
 parse tokens =
   let filtered = Token.filterNL tokens
       decls = evalState declarations (static filtered)
-      !_ = case Declaration.errs decls of
+      !_ = case topLevelCheck decls of
+        [] -> ()
+        errs -> error $ "Parser errors :\n" ++ intercalate "\n" errs
+      !_ = case Statement.errs decls of
         [] -> ()
         tkErrs -> error $ "Parser errors :\n" ++ intercalate "\n" tkErrs
    in decls
+  where
+    topLevelCheck :: [Statement] -> [String]
+    topLevelCheck decls = case map St.def decls of
+      [] -> []
+      def : _ | not $ Statement.isTopLevel def -> (display (head decls) ++ " not allowed in top-level") : topLevelCheck (tail decls)
+      _ -> topLevelCheck (tail decls)
 
 static :: [Token] -> [Token]
 static tokens = case tokens of
@@ -61,7 +68,7 @@ static tokens = case tokens of
       static (Token (TD.StrLiteral (Constant (Ty.Array Ty.Char (lenl + lenr)) (strl ++ strr))) (cl |+| cr) : tks)
   (tk : tks) -> tk : static tks
 
-declarations :: State [Token] [Declaration]
+declarations :: State [Token] [Statement]
 declarations = do
   tokens <- get
   case map Token.def tokens of
@@ -102,9 +109,9 @@ declarations = do
       : _ -> do
         modify $ drop 1
         decls <- declarations
-        return $ Declaration (DD.Invalid ("Unexpected token " ++ show tkDef)) (take 1 tokens) : decls
+        return $ Statement (SD.Invalid ("Unexpected token " ++ show tkDef)) (take 1 tokens) : decls
   where
-    go :: ([Token] -> State [Token] Declaration) -> Int -> State [Token] [Declaration]
+    go :: ([Token] -> State [Token] Statement) -> Int -> State [Token] [Statement]
     go make skip = do
       tokens <- get
       let taken = take skip tokens
@@ -423,7 +430,7 @@ collectParameters = do
         TD.Type _ : TD.Id _ : tk : _ -> return (Right $ "Expected , or ) but got " ++ show tk, take 2 tokens)
         _ -> return (Right $ "Invalid parameters : " ++ show tokens, [])
 
-func :: Type -> Id -> [Token] -> State [Token] Declaration
+func :: Type -> Id -> [Token] -> State [Token] Statement
 func ty name taken = do
   (parametersResult, paramTks) <- collectParameters
   tokens <- get
@@ -431,29 +438,29 @@ func ty name taken = do
     TD.Semicolon : _ -> do
       modify $ drop 1
       case parametersResult of
-        Left parameters -> return $ Declaration (funcDef ty name parameters) (taken ++ paramTks)
-        Right err -> return $ Declaration (DD.Invalid err) (taken ++ paramTks)
+        Left parameters -> return $ Statement (funcDef ty name parameters) (taken ++ paramTks)
+        Right err -> return $ Statement (SD.Invalid err) (taken ++ paramTks)
     TD.DelimOpen Dl.Br : _ -> do
       modify $ drop 1
       body <- collectFuncBody
       case parametersResult of
-        Left parameters -> return $ Declaration (funcDec ty name parameters body) (taken ++ paramTks ++ body)
-        Right err -> return $ Declaration (DD.Invalid err) (taken ++ paramTks ++ body)
-    _ -> return $ Declaration (DD.Invalid "Expected ; or {") (taken ++ paramTks)
+        Left parameters -> return $ Statement (funcDec ty name parameters body) (taken ++ paramTks ++ body)
+        Right err -> return $ Statement (SD.Invalid err) (taken ++ paramTks ++ body)
+    _ -> return $ Statement (SD.Invalid "Expected ; or {") (taken ++ paramTks)
 
-funcDef :: Type -> Id -> [(Type, Id)] -> DeclarationDef
-funcDef = DD.FuncDef
+funcDef :: Type -> Id -> [(Type, Id)] -> StatementDef
+funcDef = SD.FuncDef
 
 collectFuncBody :: State [Token] [Token]
 collectFuncBody = collectUntilDelimiter Dl.Br
 
-funcDec :: Type -> Id -> [(Type, Id)] -> [Token] -> DeclarationDef
-funcDec ty name params body = DD.FuncDec ty name params $ evalState statementList body
+funcDec :: Type -> Id -> [(Type, Id)] -> [Token] -> StatementDef
+funcDec ty name params body = SD.FuncDec ty name params $ evalState statementList body
 
 collectStructFields :: State [Token] [Token]
 collectStructFields = collectUntilDelimiter Dl.Br
 
-struct :: Maybe Id -> [Token] -> State [Token] Declaration
+struct :: Maybe Id -> [Token] -> State [Token] Statement
 struct name taken = do
   structTks <- collectStructFields
   tokens <- get
@@ -461,11 +468,11 @@ struct name taken = do
     TD.Semicolon : _ -> do
       modify $ drop 1
       case structFields structTks of
-        Left fields -> return $ DD.Struct name fields
-        Right err -> return $ DD.Invalid err
-    [] -> return $ DD.Invalid "Expected semicolon"
-    tk : _ -> return $ DD.Invalid ("Expected semicolon, got " ++ show tk)
-  return $ Declaration def (taken ++ structTks)
+        Left fields -> return $ SD.Struct name fields
+        Right err -> return $ SD.Invalid err
+    [] -> return $ SD.Invalid "Expected semicolon"
+    tk : _ -> return $ SD.Invalid ("Expected semicolon, got " ++ show tk)
+  return $ Statement def (taken ++ structTks)
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = case Token.filterNL tokens of
@@ -481,7 +488,7 @@ structFields tokens = case Token.filterNL tokens of
       Left fields -> Left (field : fields)
       Right err -> Right err
 
-enum :: Maybe Id -> Type -> [Token] -> State [Token] Declaration
+enum :: Maybe Id -> Type -> [Token] -> State [Token] Statement
 enum name ty taken = do
   enumTks <- collectEnumVariants
   tokens <- get
@@ -489,11 +496,11 @@ enum name ty taken = do
     TD.Semicolon : _ -> do
       modify $ drop 1
       case enumVariants enumTks of
-        Left variants -> return $ DD.Enum name ty variants
-        Right err -> return $ DD.Invalid err
-    [] -> return $ DD.Invalid "Expected semicolon"
-    tk : _ -> return $ DD.Invalid ("Expected semicolon, got " ++ show tk)
-  return $ Declaration def (taken ++ enumTks)
+        Left variants -> return $ SD.Enum name ty variants
+        Right err -> return $ SD.Invalid err
+    [] -> return $ SD.Invalid "Expected semicolon"
+    tk : _ -> return $ SD.Invalid ("Expected semicolon, got " ++ show tk)
+  return $ Statement def (taken ++ enumTks)
 
 collectEnumVariants :: State [Token] [Token]
 collectEnumVariants = collectUntilDelimiter Dl.Br
