@@ -55,13 +55,6 @@ static tokens = case tokens of
     : Token (TD.Op Op.MultOrIndir) cr
     : tks ->
       static (Token (TD.Type (Ty.Pointer ty)) (cl |+| cr) : tks)
-  Token TD.Struct cl
-    : Token (TD.Id name) cr
-    : tks ->
-      static (Token (TD.Type (Ty.Struct (Just name))) (cl |+| cr) : tks)
-  Token TD.Struct cursor
-    : tks ->
-      static (Token (TD.Type (Ty.Struct Nothing)) cursor : tks)
   Token (TD.StrLiteral (Constant (Ty.Array Ty.Char lenl) strl)) cl
     : Token (TD.StrLiteral (Constant (Ty.Array Ty.Char lenr) strr)) cr
     : tks ->
@@ -101,10 +94,9 @@ statement = do
       : TD.DelimOpen Dl.Br
       : _ ->
         makeWith (enum Nothing Ty.Int) 2
-    TD.Type (Ty.Struct name)
-      : TD.DelimOpen Dl.Br
+    TD.Struct
       : _ ->
-        makeWith (struct name) 2
+        makeWith struct 1
     TD.Type ty
       : TD.Id name
       : TD.DelimOpen Dl.Pr
@@ -440,19 +432,33 @@ funcDec ty name params body = SD.FuncDec ty name params $ evalState statementLis
 collectStructFields :: State [Token] [Token]
 collectStructFields = collectUntilDelimiter Dl.Br
 
-struct :: Maybe Id -> [Token] -> State [Token] Statement
-struct name taken = do
-  structTks <- collectStructFields
+struct :: [Token] -> State [Token] Statement
+struct taken = do
   tokens <- get
-  case map Token.def tokens of
-    TD.Semicolon : _ -> do
+  name <- case Token.def $ head tokens of
+    TD.Id name' -> do
       modify $ drop 1
+      return $ Just name'
+    _ -> return Nothing
+  tokens' <- get
+  case Token.def $ head tokens' of
+    TD.DelimOpen Dl.Br -> do
+      modify $ drop 1
+      structTks <- collectStructFields
       case structFields structTks of
-        Left fields -> return $ Statement (SD.Struct name fields) (taken ++ structTks ++ [head tokens])
-        Right err -> return $ Statement (SD.Invalid err) (taken ++ structTks ++ [head tokens])
-    [] -> return $ Statement (SD.Invalid "Expected semicolon") (taken ++ structTks ++ [head tokens])
-    tk : _ -> return $ Statement (SD.Invalid $ "Expected semicolon, got " ++ show tk) [head tokens]
-
+        Left fields -> do
+          tokens'' <- get
+          case map Token.def tokens'' of
+            TD.Id var : _ -> do
+              modify $ drop 1
+              varStatement (Ty.Struct name fields) var (taken ++ structTks ++ [head tokens''])
+            TD.Semicolon : _ -> do
+              modify $ drop 1
+              return $ Statement (SD.Struct name fields) (taken ++ structTks ++ take 1 tokens'')
+            [] -> return $ Statement (SD.Invalid "Expected semicolon") (taken ++ structTks)
+            tk : _ -> return $ Statement (SD.Invalid $ "Expected semicolon, got " ++ show tk) (take 1 tokens'')
+        Right err -> return $ Statement (SD.Invalid err) (taken ++ structTks)
+    _ -> return $ Statement (SD.Invalid "Expected semicolon") (take 1 tokens')
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = case Token.filterNL tokens of
