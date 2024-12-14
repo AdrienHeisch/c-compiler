@@ -475,18 +475,16 @@ struct taken = do
     _ -> declaration (Ty.Struct name []) (taken ++ take 1 tokens)
 
 structFields :: [Token] -> Either [(Type, Id)] String
-structFields tokens = case Token.filterNL tokens of
-  [] -> Left []
-  tokens' ->
-    let (field, rest) = runState (collectUntil TD.Semicolon) tokens'
-     in case map Token.def field of
-          [TD.Type ty, TD.Id name] -> next (ty, name) rest
-          tk : _ -> Right $ "Unexpected token : " ++ show tk
-          [] -> Right "Empty field"
+structFields tokens = validate $ evalState statementList $ Token.filterNL tokens
   where
-    next field tks = case structFields tks of
-      Left fields -> Left (field : fields)
-      Right err -> Right err
+    validate :: [Statement] -> Either [(Type, Id)] String
+    validate fields = case map St.def fields of
+      [] -> Left []
+      [SD.Var ty name Nothing] -> Left [(ty, name)]
+      SD.Var ty name Nothing : _ -> case validate (tail fields) of
+        Left rest -> Left $ (ty, name) : rest
+        Right err -> Right err
+      def -> Right $ "Unexpected statement : " ++ show def
 
 enum :: Maybe Id -> Type -> [Token] -> State [Token] Statement
 enum name ty taken = do
