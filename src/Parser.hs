@@ -444,15 +444,15 @@ struct :: Maybe Id -> [Token] -> State [Token] Statement
 struct name taken = do
   structTks <- collectStructFields
   tokens <- get
-  def <- case map Token.def tokens of
+  case map Token.def tokens of
     TD.Semicolon : _ -> do
       modify $ drop 1
       case structFields structTks of
-        Left fields -> return $ SD.Struct name fields
-        Right err -> return $ SD.Invalid err
-    [] -> return $ SD.Invalid "Expected semicolon"
-    tk : _ -> return $ SD.Invalid ("Expected semicolon, got " ++ show tk)
-  return $ Statement def (taken ++ structTks)
+        Left fields -> return $ Statement (SD.Struct name fields) (taken ++ structTks ++ [head tokens])
+        Right err -> return $ Statement (SD.Invalid err) (taken ++ structTks ++ [head tokens])
+    [] -> return $ Statement (SD.Invalid "Expected semicolon") (taken ++ structTks ++ [head tokens])
+    tk : _ -> return $ Statement (SD.Invalid $ "Expected semicolon, got " ++ show tk) [head tokens]
+
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = case Token.filterNL tokens of
@@ -472,15 +472,14 @@ enum :: Maybe Id -> Type -> [Token] -> State [Token] Statement
 enum name ty taken = do
   enumTks <- collectEnumVariants
   tokens <- get
-  def <- case map Token.def tokens of
+  case map Token.def tokens of
     TD.Semicolon : _ -> do
       modify $ drop 1
       case enumVariants enumTks of
-        Left variants -> return $ SD.Enum name ty variants
-        Right err -> return $ SD.Invalid err
-    [] -> return $ SD.Invalid "Expected semicolon"
-    tk : _ -> return $ SD.Invalid ("Expected semicolon, got " ++ show tk)
-  return $ Statement def (taken ++ enumTks)
+        Left variants -> return $ Statement (SD.Enum name ty variants) (taken ++ enumTks ++ [head tokens])
+        Right err -> return $ Statement (SD.Invalid err) (taken ++ enumTks ++ [head tokens])
+    [] -> return $ Statement (SD.Invalid "Expected semicolon") (taken ++ enumTks ++ [head tokens])
+    tk : _ -> return $ Statement (SD.Invalid $ "Expected semicolon, got " ++ show tk) [head tokens]
 
 collectEnumVariants :: State [Token] [Token]
 collectEnumVariants = collectUntilDelimiter Dl.Br
