@@ -1,10 +1,9 @@
 module Assembler (assemble) where
 
-import Control.Monad.State.Lazy (State, evalState, runState, get, modify, put)
+import Control.Monad.State.Lazy (State, evalState, get, modify, put)
 import Data.Bits (Bits (..))
 import Data.Word (Word8)
 import Instruction (Instruction (..), Program (..), Register, Value (..), regLen)
-import Debug.Trace (trace)
 
 type AsmState = State (Int, [Int])
 
@@ -24,9 +23,7 @@ secondPass ins = case ins of
     return $ bytes ++ rest'
   (Right (op, reg, lbl) : rest) -> do
     rest' <- secondPass rest
-    modify $ pcAdd 1
     addr <- getLabel lbl
-    let !_ = trace ("Jump: op " ++ show op ++ " reg " ++ show reg ++ " lbl " ++ show lbl ++ " -> addr " ++ show addr) ()
     return $ asmRC op reg addr ++ rest'
 
 firstPass :: [Instruction] -> AsmState [Either [Word8] PartialJmp]
@@ -164,24 +161,13 @@ intoByteArray n len = [fromIntegral ((n `shiftR` (i * 8)) .&. 0xFF) | i <- [0 ..
 regToInt :: Register -> Int
 regToInt = (.&. ((1 `shiftL` 64) - 1)) . fromEnum
 
--- withLabel :: (Int -> [Word8]) -> Int -> State Status [Word8]
--- withLabel f lbl = do
---   addr <- getLabel lbl
---   return $ f addr
-
 getLabel :: Int -> AsmState Int
 getLabel lbl = do
   (_, labels) <- get
-  -- let !_ = trace ("get: " ++ show labels) ()
   return $ labels !! lbl
 
 newLabel :: Int -> AsmState ()
 newLabel lbl = do -- TODO remove this parameter and related code in compiler
   (pc, labels) <- get
-  -- let newLabels = case length labels of
-  --       len | len + 1 == lbl -> labels ++ [pc]
-  --       len | len < lbl -> take lbl labels ++ [pc]
-  --       _ -> error "Can't declare label"
-  -- let !_ = trace ("set: " ++ show newLabels) ()
   let newLabels = labels ++ [pc]
   put (pc, newLabels)

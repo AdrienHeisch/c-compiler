@@ -124,7 +124,7 @@ makeDef str = case str of
   "alignof" -> keywordUnimplErr str
   "typeof" -> keywordUnimplErr str
   "typeof_unqual" -> keywordUnimplErr str
-  "sizeof" -> keywordUnimplErr str
+  "sizeof" -> Op Op.Sizeof
   "!" -> Op Op.Not
   "==" -> Op Op.Equal
   "!=" -> Op Op.NotEqual
