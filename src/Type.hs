@@ -23,8 +23,8 @@ data Type
   | Pointer Type
   | Array Type Int
   | ArrayNoHint Type
-  | Struct (Maybe Id)
-  | Enum (Maybe Id) Type
+  | Struct (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
+  | Enum (Maybe Id) Type -- TODO replace with underlying type ?
   deriving (Show, Eq)
 
 signed :: Type -> Type
@@ -123,9 +123,9 @@ toStr ty = case ty of
   Double -> "double"
   LDouble -> "long double"
   Pointer ty' -> toStr ty' ++ " *"
-  Array ty' len -> toStr ty' ++ " [" ++ show len ++ "]"
+  Array ty' arrlen -> toStr ty' ++ " [" ++ show arrlen ++ "]"
   ArrayNoHint ty' -> toStr ty' ++ " []"
-  Struct Nothing -> "struct"
-  Struct (Just name) -> "struct" ++ Identifier.toStr name
+  Struct Nothing fields -> "struct { " ++ show fields ++ " }" 
+  Struct (Just name) fields -> "struct " ++ Identifier.toStr name ++ " { " ++ show fields ++ " }"
   Enum Nothing ty' -> "enum : " ++ toStr ty'
   Enum (Just name) ty' -> "enum " ++ Identifier.toStr name ++ " : " ++ toStr ty'

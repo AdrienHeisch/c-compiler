@@ -16,7 +16,7 @@ import Statement qualified (errs, isTopLevel)
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner)
-import Token qualified (Token (..), filterNL)
+import Token qualified (Token (..), filterNL, foldCrs)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
@@ -37,7 +37,7 @@ parse tokens =
     topLevelCheck :: [Statement] -> [String]
     topLevelCheck decls = case map St.def decls of
       [] -> []
-      def : _ | not $ Statement.isTopLevel def -> (display (head decls) ++ " not allowed in top-level") : topLevelCheck (tail decls)
+      def : _ | not $ Statement.isTopLevel def -> (display (head decls) ++ " at " ++ show (Token.foldCrs $ St.tks $ head decls) ++ " not allowed in top-level") : topLevelCheck (tail decls)
       _ -> topLevelCheck (tail decls)
 
 static :: [Token] -> [Token]
