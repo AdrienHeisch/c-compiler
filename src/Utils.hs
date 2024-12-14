@@ -43,7 +43,5 @@ instance (Display a) => Display [a] where
 
 instance (Display a) => Display (Maybe a) where
   display :: Maybe a -> String
-  display m = "[" ++ go m ++ "]"
-    where
-      go Nothing = "_"
-      go (Just a) = display a
+  display Nothing = "_"
+  display (Just a) = display a
