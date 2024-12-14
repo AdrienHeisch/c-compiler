@@ -12,7 +12,7 @@ import Identifier (Id)
 import Op (Op)
 import Op qualified
 import Statement (Statement (Statement), StatementDef)
-import Statement qualified (isTopLevel, errs)
+import Statement qualified (errs, isTopLevel)
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner)
@@ -20,12 +20,12 @@ import Token qualified (Token (..), filterNL)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
 import Type qualified as Ty
-import Utils (listToMaybeList, Display (display))
+import Utils (Display (display), listToMaybeList)
 
 parse :: [Token] -> [Statement]
 parse tokens =
   let filtered = Token.filterNL tokens
-      decls = evalState declarations (static filtered)
+      decls = evalState statementList (static filtered)
       !_ = case topLevelCheck decls of
         [] -> ()
         errs -> error $ "Parser errors :\n" ++ intercalate "\n" errs
@@ -68,60 +68,7 @@ static tokens = case tokens of
       static (Token (TD.StrLiteral (Constant (Ty.Array Ty.Char (lenl + lenr)) (strl ++ strr))) (cl |+| cr) : tks)
   (tk : tks) -> tk : static tks
 
-declarations :: State [Token] [Statement]
-declarations = do
-  tokens <- get
-  case map Token.def tokens of
-    [] -> return []
-    [TD.Eof] -> return []
-    TD.Enum
-      : TD.Id name
-      : TD.Op Op.Colon
-      : TD.Type ty
-      : TD.DelimOpen Dl.Br
-      : _ -> do
-        go (enum (Just name) ty) 5
-    TD.Enum
-      : TD.Op Op.Colon
-      : TD.Type ty
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        go (enum Nothing ty) 4
-    TD.Enum
-      : TD.Id name
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        go (enum (Just name) Ty.Int) 3
-    TD.Enum
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        go (enum Nothing Ty.Int) 2
-    TD.Type (Ty.Struct name)
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        go (struct name) 2
-    TD.Type ty
-      : TD.Id name
-      : TD.DelimOpen Dl.Pr
-      : _ ->
-        go (func ty name) 3
-    tkDef
-      : _ -> do
-        modify $ drop 1
-        decls <- declarations
-        return $ Statement (SD.Invalid ("Unexpected token " ++ show tkDef)) (take 1 tokens) : decls
-  where
-    go :: ([Token] -> State [Token] Statement) -> Int -> State [Token] [Statement]
-    go make skip = do
-      tokens <- get
-      let taken = take skip tokens
-      modify $ drop skip
-      decl <- make taken
-      decls <- declarations
-      return $ decl : decls
-
 statementList :: State [Token] [Statement]
--- FIXME why NL and not ; ?
 statementList = parseListWithInner TD.Semicolon Dl.Br statement
 
 statement :: State [Token] Statement
@@ -130,6 +77,39 @@ statement = do
   case map Token.def tokens of
     [] ->
       make (Statement SD.Empty) 0
+    [TD.Eof] ->
+      make (Statement SD.Empty) 1
+    TD.Enum
+      : TD.Id name
+      : TD.Op Op.Colon
+      : TD.Type ty
+      : TD.DelimOpen Dl.Br
+      : _ -> do
+        makeWith (enum (Just name) ty) 5
+    TD.Enum
+      : TD.Op Op.Colon
+      : TD.Type ty
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        makeWith (enum Nothing ty) 4
+    TD.Enum
+      : TD.Id name
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        makeWith (enum (Just name) Ty.Int) 3
+    TD.Enum
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        makeWith (enum Nothing Ty.Int) 2
+    TD.Type (Ty.Struct name)
+      : TD.DelimOpen Dl.Br
+      : _ ->
+        makeWith (struct name) 2
+    TD.Type ty
+      : TD.Id name
+      : TD.DelimOpen Dl.Pr
+      : _ ->
+        makeWith (func ty name) 3
     TD.Semicolon
       : _ ->
         make (Statement SD.Empty) 1
