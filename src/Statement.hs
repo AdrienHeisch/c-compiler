@@ -1,6 +1,8 @@
 module Statement (Statement (..), StatementDef (..), isTopLevel, errs) where
 
 import Constant (Constant, IntRepr)
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Maybe (catMaybes, mapMaybe)
 import Expr (Expr)
 import Expr qualified (errs)
 import Identifier (Id)
@@ -23,7 +25,7 @@ data StatementDef
   | Struct (Maybe Id) [(Type, Id)]
   | Enum (Maybe Id) Type [(Id, Maybe Expr)] -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
   | Expr Expr
-  | Var Type Id (Maybe Expr)
+  | Var (NonEmpty (Type, Id, Maybe Expr))
   | Block [Statement]
   | If {cond :: Expr, then_ :: Statement, else_ :: Maybe Statement}
   | Switch {eval :: Expr, body :: Statement}
@@ -55,7 +57,7 @@ instance Display StatementDef where
     FuncDec ty name params sts -> unwords ["FuncDec", show ty, show name, show params, display sts]
     Enum name ty vars -> unwords ["Enum", show name, show ty, displayVariants vars]
     Expr e -> "Expr " ++ display e
-    Var ty name e -> unwords ["Var", show ty, show name, display e]
+    Var (var :| vars) -> unwords ("Var" : map displayVar (var : vars))
     If e st0 st1 -> unwords ["If", display e, display st0, display st1]
     Switch e st -> unwords ["Switch", display e, display st]
     While e st -> unwords ["While", display e, display st]
@@ -66,6 +68,8 @@ instance Display StatementDef where
     Block block -> "Block " ++ display block
     _ -> show statement
     where
+      displayVar (ty, name, e) = "(" ++ unwords [show ty, show name, display e] ++ ")"
+
       displayVariants [] = ""
       displayVariants [(name, ex)] = unwords [show name, display ex]
       displayVariants (var : vars) = displayVariants [var] ++ displayVariants vars
@@ -77,7 +81,7 @@ errs = concatMap err
     err statement = case def statement of
       FuncDec _ _ _ sts -> Statement.errs sts
       Expr e -> Expr.errs [e]
-      Var _ _ (Just e) -> Expr.errs [e]
+      Var ((_, _, ex) :| vars) -> Expr.errs (catMaybes [ex]) ++ Expr.errs (mapMaybe (\(_, _, e) -> e) vars)
       If e st0 (Just st1) -> Expr.errs [e] ++ errs [st0, st1]
       Switch e st -> Expr.errs [e] ++ errs [st]
       While e st -> Expr.errs [e] ++ errs [st]

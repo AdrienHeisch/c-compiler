@@ -4,7 +4,8 @@ import Constant (Constant (Constant))
 import Context (Context, addVar, addVars, getLabel, getVar)
 import Context qualified (new)
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
-import Expr (Expr, Expr(Expr))
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Expr (Expr (Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
 import Identifier (Id)
@@ -54,7 +55,7 @@ statement st = case Statement.def st of
   SD.Empty -> return []
   SD.Block block -> statements block
   SD.Expr e -> expr e
-  SD.Var ty name e -> var ty name e
+  SD.Var (v :| vs) -> vars (v : vs)
   -- SD.If cond then_ else_ -> if_ cond then_ else_
   -- SD.Switch {eval :: Expr, body :: Statement} ->
   SD.While cond body -> while cond body
@@ -69,6 +70,11 @@ statement st = case Statement.def st of
   -- SD.Labeled Id Statement ->
   SD.Invalid str -> error $ "Invalid statement : " ++ str
   _ -> error $ "Statement not implemented yet : " ++ show st
+  where
+    vars :: [(Type, Id, Maybe Expr)] -> State Context [Instruction]
+    vars vs = do
+      ins <- mapM (\(ty, name, e) -> var ty name e) vs
+      return . concat $ ins
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = case mexpr of

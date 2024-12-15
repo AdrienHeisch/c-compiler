@@ -1,4 +1,20 @@
-module Token (Token (..), TokenDef (..), Delimiter (..), errs, foldCrs, makeDef, defToStr, filterNil, filterNL, collectUntil, collectUntilDelimiter, parseList, parseListWithInner) where
+module Token
+  ( Token (..),
+    TokenDef (..),
+    Delimiter (..),
+    errs,
+    foldCrs,
+    makeDef,
+    defToStr,
+    filterNil,
+    filterNL,
+    collectUntil,
+    collectUntilWithDelimiters,
+    collectUntilDelimiter,
+    parseList,
+    parseListWithInner,
+  )
+where
 
 import CharClasses qualified as CC
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
@@ -263,6 +279,32 @@ collectUntil end = do
       tks' <- collectUntil end
       return $ tk : tks'
 
+collectUntilWithDelimiters :: [TokenDef] -> State [Token] ([Token], Maybe Token)
+collectUntilWithDelimiters seps = go (0, 0, 0)
+  where
+    go :: (Int, Int, Int) -> State [Token] ([Token], Maybe Token)
+    go (pr, br, sqbr) = do
+      tokens <- get
+      case map def tokens of
+        [] -> return ([], Nothing)
+        DelimClose Delimiter.Pr : _ | pr == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        DelimClose Delimiter.Pr : _ -> next (head tokens) (pr - 1, br, sqbr)
+        DelimOpen Delimiter.Pr : _ -> next (head tokens) (pr + 1, br, sqbr)
+        DelimClose Delimiter.Br : _ | br == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        DelimClose Delimiter.Br : _ -> next (head tokens) (pr, br - 1, sqbr)
+        DelimOpen Delimiter.Br : _ -> next (head tokens) (pr, br + 1, sqbr)
+        DelimClose Delimiter.SqBr : _ | sqbr == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        DelimClose Delimiter.SqBr : _ -> next (head tokens) (pr, br, sqbr - 1)
+        DelimOpen Delimiter.SqBr : _ -> next (head tokens) (pr, br, sqbr + 1)
+        (tk : _) | tk `elem` seps && pr == 0 && br == 0 && sqbr == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        _ -> next (head tokens) (pr, br, sqbr)
+
+    next :: Token -> (Int, Int, Int) -> State [Token] ([Token], Maybe Token)
+    next tk depth = do
+      modify $ drop 1
+      (tks, lastTk) <- go depth
+      return (tk : tks, lastTk)
+
 collectUntilDelimiter :: Delimiter -> State [Token] [Token]
 collectUntilDelimiter del = go 0
   where
@@ -298,19 +340,19 @@ parseList end parser = do
       return $ el : els
 
 parseListWithInner :: TokenDef -> Delimiter -> State [Token] a -> State [Token] [a]
-parseListWithInner end del parser = go (0 :: Int)
+parseListWithInner sep del parser = go (0 :: Int)
   where
     go depth = do
       tokens <- get
       case tokens of
         [] -> return []
         (tk : _)
-          | Token.def tk == end && depth == 0 -> do modify $ drop 1; go 0
+          | Token.def tk == sep && depth == 0 -> do modify $ drop 1; go 0
           | Token.def tk == DelimClose del && depth == 0 -> do modify $ drop 1; return []
           | Token.def tk == DelimClose del -> next (depth - 1)
           | Token.def tk == DelimOpen del -> next (depth + 1)
           | otherwise -> next depth
-    
+
     next depth = do
       el <- parser
       els <- go depth
