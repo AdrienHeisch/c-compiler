@@ -24,6 +24,7 @@ data StatementDef
   | FuncDec Type Id [(Type, Id)] [Statement]
   | Struct (Maybe Id) [(Type, Id)]
   | Enum (Maybe Id) Type [(Id, Maybe Expr)] -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
+  | Typedef Type Id
   | Expr Expr
   | Var (NonEmpty (Type, Id, Maybe Expr))
   | Block [Statement]
@@ -39,6 +40,7 @@ data StatementDef
   | Case (Constant IntRepr)
   | Goto Id
   | Labeled Id Statement
+  | Ambiguous (Statement, Statement)
   | Invalid String
   deriving (Show)
 
@@ -48,6 +50,7 @@ isTopLevel def = case def of
   FuncDec {} -> True
   Struct {} -> True
   Enum {} -> True
+  Typedef {} -> True
   Var {} -> True
   _ -> False
 

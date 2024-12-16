@@ -5,6 +5,7 @@ import Control.Monad.State.Lazy (State, evalState, get, modify, runState)
 import Cursor (CursorOps (..))
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Maybe (isJust, isNothing)
 import Delimiter qualified as Dl
 import Expr (Expr (Expr), ExprDef)
 import Expr qualified (Expr (..))
@@ -16,7 +17,7 @@ import Statement (Statement (Statement), StatementDef)
 import Statement qualified (errs, isTopLevel)
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
-import Token (Token (Token), collectUntil, collectUntilDelimiter, collectUntilWithDelimiters, parseListWithInner)
+import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner)
 import Token qualified (Token (..), filterNL, foldCrs)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
@@ -27,12 +28,12 @@ parse :: [Token] -> [Statement]
 parse tokens =
   let filtered = Token.filterNL tokens
       decls = evalState statementList (static filtered)
-      !_ = case topLevelCheck decls of
-        [] -> ()
-        errs -> error $ "Parser errors :\n" ++ intercalate "\n" errs
       !_ = case Statement.errs decls of
         [] -> ()
         tkErrs -> error $ "Parser errors :\n" ++ intercalate "\n" tkErrs
+      !_ = case topLevelCheck decls of
+        [] -> ()
+        errs -> error $ "Parser errors :\n" ++ intercalate "\n" errs
    in decls
   where
     topLevelCheck :: [Statement] -> [String]
@@ -69,6 +70,8 @@ statement = do
       make (Statement SD.Empty) 0
     [TD.Eof] ->
       make (Statement SD.Empty) 1
+    TD.Typedef
+      : _ -> makeWith typedef 1
     TD.Enum
       : TD.Id name
       : TD.Op Op.Colon
@@ -150,79 +153,136 @@ statement = do
     TD.Type ty
       : _ ->
         makeWith (declaration ty) 1
+    TD.Id tyid
+      : TD.Id _
+      : _ ->
+        makeWith (declaration (Ty.Typedef tyid)) 1
     _ ->
       makeExpr
   where
     make :: ([Token] -> Statement) -> Int -> State [Token] Statement
     make st skip = do
       tokens <- get
-      let taken = take skip tokens
       modify $ drop skip
-      return $ st taken
+      return . st $ take skip tokens
 
     makeWith :: ([Token] -> State [Token] Statement) -> Int -> State [Token] Statement
     makeWith makeF skip = do
       tokens <- get
-      let taken = take skip tokens
       modify $ drop skip
-      makeF taken
+      makeF $ take skip tokens
 
     makeExpr :: State [Token] Statement
     makeExpr = do
       tokens <- collectUntil TD.Semicolon
-      let expression = expr tokens
-      return $ Statement (SD.Expr expression) (Expr.tks expression)
+      let ex = expr tokens
+      return $ Statement (SD.Expr ex) (Expr.tks ex)
 
 declaration :: Type -> [Token] -> State [Token] Statement
-declaration ty taken = do
-  (declarations, tokens) <- declare ty taken
-  case declarations of
+declaration spec taken = do
+  (mdecls, tokens) <- go
+  case mdecls of
     Left [] -> return $ Statement (SD.Invalid "Empty declaration") (taken ++ tokens)
     Left (decl : decls) -> return $ Statement (SD.Var (decl :| decls)) (taken ++ tokens)
     Right err -> return $ Statement (SD.Invalid err) (taken ++ tokens)
+  where
+    go :: State [Token] (Either [(Type, Id, Maybe Expr)] String, [Token])
+    go = do
+      (res, tks) <- makeType spec
+      case res of
+        Right err -> return (Right err, tks)
+        Left (_, Nothing) -> return (Right "Expected variable identifier", tks)
+        Left (ty, Just name) -> do
+          ex <- assign
+          tokens <- get
+          case Token.def $ head tokens of
+            TD.Op Op.Comma -> do
+              modify $ drop 1
+              (mdecls, dTks) <- go
+              case mdecls of
+                Right err -> return (Right err, tks)
+                Left decls -> return (Left ((ty, name, ex) : decls), tks ++ dTks)
+            _ -> return (Left [(ty, name, ex)], tks)
 
-declare :: Type -> [Token] -> State [Token] (Either [(Type, Id, Maybe Expr)] String, [Token])
-declare ty taken = do
+getType :: State [Token] (Either (Type, Maybe Id) String, [Token])
+getType = do
   tokens <- get
   case Token.def $ head tokens of
-    TD.Op Op.MultOrIndir -> do
+    TD.Type ty -> do
       modify $ drop 1
-      declare (Ty.Pointer ty) (taken ++ take 1 tokens)
+      makeType ty
     TD.Id name -> do
       modify $ drop 1
-      declareNamed ty name (taken ++ take 1 tokens)
-    tk -> return (Right $ "Expected variable, got " ++ show tk, take 1 tokens)
+      makeType (Ty.Typedef name)
+    tk -> return (Right $ "Expected type, got " ++ show tk, take 1 tokens)
 
-declareNamed :: Type -> Id -> [Token] -> State [Token] (Either [(Type, Id, Maybe Expr)] String, [Token])
-declareNamed ty name taken = do
+makeType :: Type -> State [Token] (Either (Type, Maybe Id) String, [Token])
+makeType spec = go spec Nothing False
+  where
+    go :: Type -> Maybe Id -> Bool -> State [Token] (Either (Type, Maybe Id) String, [Token])
+    go ty name pr = do
+      tokens <- get
+      case Token.def $ head tokens of
+        TD.DelimClose Dl.Pr
+          | pr -> do
+              modify $ drop 1
+              thenGo ty name
+        _ | isJust name -> do
+          thenGo ty name
+        TD.Id name' | isNothing name -> do
+          modify $ drop 1
+          go ty (Just name') pr
+        TD.Op Op.MultOrIndir -> do
+          modify $ drop 1
+          go (Ty.Pointer ty) Nothing pr
+        TD.DelimOpen Dl.Pr
+          | not pr -> do
+              modify $ drop 1
+              go (Ty.Pointer ty) Nothing True
+        tk | pr -> return (Right $ "Unexpected token " ++ show tk, take 1 tokens)
+        _ -> thenGo ty name
+
+    thenGo :: Type -> Maybe Id -> State [Token] (Either (Type, Maybe Id) String, [Token])
+    thenGo ty name = do
+      tokens <- get
+      case Token.def $ head tokens of
+        TD.DelimOpen Dl.SqBr -> do
+          modify $ drop 1
+          lenTks <- collectUntilDelimiter Dl.SqBr
+          if null lenTks
+            then return (Left (Ty.ArrayNoHint ty, name), take 1 tokens)
+            else
+              let ex = expr lenTks
+               in case Expr.def ex of
+                    ED.IntLiteral (Constant len_ty len)
+                      | Ty.isInteger len_ty ->
+                          return (Left (Ty.Array ty len, name), take 1 tokens)
+                    _ -> return (Right $ "Invalid array size : " ++ show lenTks, lenTks)
+        TD.DelimOpen Dl.Pr -> do
+          tys <- parseListWithInner (TD.Op Op.Comma) Dl.Pr getType
+          case params tys of
+            Left ps -> return (Left (Ty.FunctionPointer ty ps, name), take 1 tokens)
+            Right (err, errTks) -> return (Right err, errTks)
+        _ -> return (Left (ty, name), take 1 tokens)
+
+    params :: [(Either (Type, Maybe Id) String, [Token])] -> Either [Type] (String, [Token])
+    params tyList = case tyList of
+      [] -> Left []
+      (Left (ty, Nothing), _) : rest ->
+        case params rest of
+          Left tys -> Left (ty : tys)
+          Right (err, errTks) -> Right (err, errTks)
+      (Left (_, Just name), tks) : _ -> Right ("Unexpected identifier : " ++ show name, tks)
+      (Right err, tks) : _ -> Right (err, tks)
+
+assign :: State [Token] (Maybe Expr)
+assign = do
   tokens <- get
-  case Token.def $ head tokens of
-    TD.DelimOpen Dl.SqBr -> do
+  case map Token.def tokens of
+    TD.Op Op.Assign : _ -> do
       modify $ drop 1
-      arrTks <- collectUntilDelimiter Dl.SqBr
-      case map Token.def arrTks of
-        [TD.IntLiteral (Constant len_ty len)]
-          | Ty.isInteger len_ty ->
-              declareNamed (Ty.Array ty len) name (taken ++ take 1 tokens)
-        [] -> declareNamed (Ty.ArrayNoHint ty) name (taken ++ take 1 tokens)
-        _ -> return (Right $ "Invalid array size : " ++ show arrTks, taken ++ arrTks)
-    _ -> do
-      (declareTks, lastTk) <- Token.collectUntilWithDelimiters [TD.Semicolon, TD.Op Op.Comma]
-      case map Token.def declareTks of
-        [] -> declareNext (ty, name, Nothing) ty taken lastTk
-        TD.Op Op.Assign : _ -> declareNext (ty, name, Just $ expr $ drop 1 declareTks) ty taken lastTk
-        _ -> return (Right $ "Invalid assignment : " ++ show declareTks, taken ++ declareTks)
-
-declareNext :: (Type, Id, Maybe Expr) -> Type -> [Token] -> Maybe Token -> State [Token] (Either [(Type, Id, Maybe Expr)] String, [Token])
-declareNext decl ty taken lastTk = case lastTk of
-  (Just tk@(Token TD.Semicolon _)) -> return (Left [decl], taken ++ [tk])
-  Just (Token (TD.Op Op.Comma) _) -> do
-    (rest, tokens) <- declare ty taken
-    case rest of
-      Left decls -> return (Left $ decl : decls, taken ++ tokens)
-      Right err -> return (Right err, tokens)
-  (Just tk@(Token _ _)) -> return (Right $ "Unexpected token : " ++ show lastTk, taken ++ [tk])
-  Nothing -> return (Right "Unexpected end of file", taken)
+      return $ Just . expr $ drop 1 tokens
+    _ -> return Nothing
 
 if_ :: [Token] -> State [Token] Statement
 if_ taken = do
@@ -412,6 +472,14 @@ binop lTks leftDef op right = case right of
     | Op.precedence op <= Op.precedence r_op ->
         Expr (ED.Binop (binop lTks leftDef op r_left) r_op r_right) (lTks ++ rTks)
   Expr _ rTks -> Expr (ED.Binop (Expr leftDef lTks) op right) (lTks ++ rTks)
+
+typedef :: [Token] -> State [Token] Statement
+typedef taken = do
+  (mty, tokens) <- getType
+  case mty of
+    Left (ty, Just name) -> return $ Statement (SD.Typedef ty name) (taken ++ tokens)
+    Left (_, Nothing) -> return $ Statement (SD.Invalid "Expected typedef name") (taken ++ tokens)
+    Right err -> return $ Statement (SD.Invalid err) (taken ++ tokens)
 
 collectParameters :: State [Token] (Either [(Type, Id)] String, [Token])
 collectParameters = do

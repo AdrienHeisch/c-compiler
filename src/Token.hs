@@ -325,19 +325,24 @@ collectUntilDelimiter del = go 0
       tks <- go depth
       return $ tk : tks
 
-parseList :: TokenDef -> State [Token] a -> State [Token] [a]
-parseList end parser = do
-  tokens <- get
-  case tokens of
-    [] -> return []
-    (tk : _) | Token.def tk == end -> do
-      modify $ drop 1
-      parseList end parser
-    _ -> do
-      el <- parser
-      modify $ drop 1
-      els <- parseList end parser
-      return $ el : els
+parseList :: TokenDef -> TokenDef -> State [Token] a -> State [Token] [a]
+parseList sep end parser = go
+  where
+    go = do
+      tokens <- get
+      case tokens of
+        [] -> return []
+        (tk : _) | Token.def tk == end -> do
+          modify $ drop 1
+          return []
+        (tk : _) | Token.def tk == sep -> do
+          modify $ drop 1
+          parseList sep end parser
+        _ -> do
+          el <- parser
+          modify $ drop 1
+          els <- parseList sep end parser
+          return $ el : els
 
 parseListWithInner :: TokenDef -> Delimiter -> State [Token] a -> State [Token] [a]
 parseListWithInner sep del parser = go (0 :: Int)

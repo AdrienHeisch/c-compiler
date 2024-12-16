@@ -2,6 +2,7 @@ module Type (Type (..), signed, unsigned, isInteger, isFloating, len, toStr) whe
 
 import Identifier (Id)
 import Identifier qualified
+import Data.List (intercalate)
 
 data Type
   = Infer
@@ -25,6 +26,8 @@ data Type
   | ArrayNoHint Type
   | Struct (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
   | Enum (Maybe Id) Type -- TODO replace with underlying type ?
+  | Typedef Id
+  | FunctionPointer Type [Type]
   deriving (Show, Eq)
 
 signed :: Type -> Type
@@ -125,7 +128,9 @@ toStr ty = case ty of
   Pointer ty' -> toStr ty' ++ " *"
   Array ty' arrlen -> toStr ty' ++ " [" ++ show arrlen ++ "]"
   ArrayNoHint ty' -> toStr ty' ++ " []"
-  Struct Nothing fields -> "struct { " ++ show fields ++ " }" 
+  Struct Nothing fields -> "struct { " ++ show fields ++ " }"
   Struct (Just name) fields -> "struct " ++ Identifier.toStr name ++ " { " ++ show fields ++ " }"
   Enum Nothing ty' -> "enum : " ++ toStr ty'
   Enum (Just name) ty' -> "enum " ++ Identifier.toStr name ++ " : " ++ toStr ty'
+  Typedef name -> Identifier.toStr name
+  FunctionPointer ret tys -> toStr ret ++ "(*)(" ++ intercalate ", " (map toStr tys) ++ ")"
