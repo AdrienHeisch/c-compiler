@@ -617,23 +617,29 @@ structOrUnionType parser = do
     TD.DelimOpen Dl.Br -> do
       modify $ drop 1
       structTks <- collectStructFields
-      case structFields structTks of
+      case structOrUnionFields structTks of
         Left fields -> return (Left (parser name fields), [head tokens, head tokens'] ++ structTks)
         Right err -> return (Right err, structTks)
     _ -> return (Left (parser name []), take 1 tokens)
 
-structFields :: [Token] -> Either [(Type, Id)] String
-structFields tokens = validate $ evalState statementList $ Token.filterNL tokens
+structOrUnionFields :: [Token] -> Either [(Type, Id)] String
+structOrUnionFields tokens = validate $ evalState statementList $ Token.filterNL tokens
   where
     validate :: [Statement] -> Either [(Type, Id)] String
     validate fields = case map St.def fields of
       [] -> Left []
-      [SD.Var (var :| vars)] -> Left $ map varToField (var : vars)
-      SD.Var (var :| vars) : _ -> case validate (tail fields) of
-        Left rest -> Left $ map varToField (var : vars) ++ rest
+      [st] -> makeField st
+      st : _ -> case makeField st of
+        Left field -> case validate (tail fields) of
+          Left rest -> Left $ field ++ rest
+          Right err -> Right err
         Right err -> Right err
-      def -> Right $ "Unexpected statement : " ++ show def
 
+    makeField (SD.Var (var :| vars)) = Left $ map varToField (var : vars)
+    makeField (SD.Struct Nothing fields) = Left fields
+    makeField (SD.Union Nothing fields) = Left fields -- FIXME inner unions
+    makeField st = Right $ "Invalid field : " ++ show st
+    
     varToField (ty, name, _) = (ty, name)
 
 enum :: Maybe Id -> Type -> [Token] -> State [Token] Statement
