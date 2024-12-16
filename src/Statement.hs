@@ -20,8 +20,8 @@ instance Display Statement where
 
 data StatementDef
   = Empty
-  | FuncDef Type Id [(Type, Id)]
-  | FuncDec Type Id [(Type, Id)] [Statement]
+  | FuncDef Type Id [(Type, Maybe Id)]
+  | FuncDec Type Id [(Type, Maybe Id)] [Statement]
   | Struct (Maybe Id) [(Type, Id)]
   | Enum (Maybe Id) Type [(Id, Maybe Expr)] -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
   | Typedef Type Id

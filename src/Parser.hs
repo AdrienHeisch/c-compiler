@@ -214,6 +214,12 @@ getType = do
     TD.Id name -> do
       modify $ drop 1
       makeType (Ty.Typedef name)
+    TD.Struct -> do
+      modify $ drop 1
+      (mty, tks) <- structType
+      case mty of
+        Right err -> return (Right err, tks)
+        Left ty -> makeType ty
     tk -> return (Right $ "Expected type, got " ++ show tk, take 1 tokens)
 
 makeType :: Type -> State [Token] (Either (Type, Maybe Id) String, [Token])
@@ -481,31 +487,25 @@ typedef taken = do
     Left (_, Nothing) -> return $ Statement (SD.Invalid "Expected typedef name") (taken ++ tokens)
     Right err -> return $ Statement (SD.Invalid err) (taken ++ tokens)
 
-collectParameters :: State [Token] (Either [(Type, Id)] String, [Token])
+collectParameters :: State [Token] (Either [(Type, Maybe Id)] String, [Token])
 collectParameters = do
   tokens <- get
   case tokens of
     [] -> return (Left [], [])
     _ -> do
-      tokens' <- collectUntilDelimiter Dl.Pr
-      let (params, tokens'') = evalState makeList tokens'
-       in return (params, tokens'')
+      mparams <- parseListWithInner (TD.Op Op.Comma) Dl.Pr getType
+      case parameters mparams of
+        Right (err, errTks) -> return (Right err, errTks)
+        Left params -> return (Left params, tokens)
   where
-    makeList :: State [Token] (Either [(Type, Id)] String, [Token])
-    makeList = do
-      tokens <- get
-      case map Token.def tokens of
-        [] -> return (Left [], [])
-        [TD.Type ty, TD.Id name] -> return (Left [(ty, name)], take 2 tokens)
-        TD.Type ty : TD.Id name : TD.Op Op.Comma : _ -> do
-          modify $ drop 3
-          (mparams, tks) <- makeList
-          case mparams of
-            Left params -> return (Left $ (ty, name) : params, take 2 tokens ++ tks)
-            Right err -> return (Right err, tks)
-        -- withSplit tokens''' (next (ty, name)) 3
-        TD.Type _ : TD.Id _ : tk : _ -> return (Right $ "Expected , or ) but got " ++ show tk, take 2 tokens)
-        _ -> return (Right $ "Invalid parameters : " ++ show tokens, [])
+    parameters :: [(Either (Type, Maybe Id) String, [Token])] -> Either [(Type, Maybe Id)] (String, [Token])
+    parameters tyList = case tyList of
+      [] -> Left []
+      (Left (ty, name), _) : rest -> 
+        case parameters rest of
+          Left tys -> Left ((ty, name) : tys)
+          Right (err, errTks) -> Right (err, errTks)
+      (Right err, tks) : _ -> Right (err, tks)
 
 func :: Type -> Id -> [Token] -> State [Token] Statement
 func ty name taken = do
@@ -515,23 +515,23 @@ func ty name taken = do
     TD.Semicolon : _ -> do
       modify $ drop 1
       case parametersResult of
-        Left parameters -> return $ Statement (funcDef ty name parameters) (taken ++ paramTks)
+        Left params -> return $ Statement (funcDef ty name params) (taken ++ paramTks)
         Right err -> return $ Statement (SD.Invalid err) (taken ++ paramTks)
     TD.DelimOpen Dl.Br : _ -> do
       modify $ drop 1
       body <- collectFuncBody
       case parametersResult of
-        Left parameters -> return $ Statement (funcDec ty name parameters body) (taken ++ paramTks ++ body)
+        Left params -> return $ Statement (funcDec ty name params body) (taken ++ paramTks ++ body)
         Right err -> return $ Statement (SD.Invalid err) (taken ++ paramTks ++ body)
     _ -> return $ Statement (SD.Invalid "Expected ; or {") (taken ++ paramTks)
 
-funcDef :: Type -> Id -> [(Type, Id)] -> StatementDef
+funcDef :: Type -> Id -> [(Type, Maybe Id)] -> StatementDef
 funcDef = SD.FuncDef
 
 collectFuncBody :: State [Token] [Token]
 collectFuncBody = collectUntilDelimiter Dl.Br
 
-funcDec :: Type -> Id -> [(Type, Id)] -> [Token] -> StatementDef
+funcDec :: Type -> Id -> [(Type, Maybe Id)] -> [Token] -> StatementDef
 funcDec ty name params body = SD.FuncDec ty name params $ evalState statementList body
 
 collectStructFields :: State [Token] [Token]
@@ -539,6 +539,21 @@ collectStructFields = collectUntilDelimiter Dl.Br
 
 struct :: [Token] -> State [Token] Statement
 struct taken = do
+  (mty, tokens) <- structType
+  case mty of
+    Right err -> return $ Statement (SD.Invalid err) tokens
+    Left ty@(Ty.Struct name fields) -> do
+      tokens' <- get
+      case map Token.def tokens' of
+        TD.Semicolon : _ -> do
+          modify $ drop 1
+          return $ Statement (SD.Struct name fields) (taken ++ tokens ++ take 1 tokens')
+        [] -> return $ Statement (SD.Invalid "Unexpected end of file") (taken ++ tokens)
+        _ -> declaration ty (tokens ++ [head tokens'])
+    Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
+
+structType :: State [Token] (Either Type String, [Token])
+structType = do
   tokens <- get
   name <- case Token.def $ head tokens of
     TD.Id name' -> do
@@ -551,16 +566,9 @@ struct taken = do
       modify $ drop 1
       structTks <- collectStructFields
       case structFields structTks of
-        Left fields -> do
-          tokens'' <- get
-          case map Token.def tokens'' of
-            TD.Semicolon : _ -> do
-              modify $ drop 1
-              return $ Statement (SD.Struct name fields) (taken ++ structTks ++ take 1 tokens'')
-            [] -> return $ Statement (SD.Invalid "Unexpected end of file") (taken ++ structTks)
-            _ -> declaration (Ty.Struct name fields) (taken ++ structTks ++ [head tokens''])
-        Right err -> return $ Statement (SD.Invalid err) (taken ++ structTks)
-    _ -> declaration (Ty.Struct name []) (taken ++ take 1 tokens)
+        Left fields -> return (Left (Ty.Struct name fields), [head tokens, head tokens'] ++ structTks)
+        Right err -> return (Right err, structTks)
+    _ -> return (Left (Ty.Struct name []), take 1 tokens)
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = validate $ evalState statementList $ Token.filterNL tokens

@@ -5,6 +5,7 @@ import Context (Context, addVar, addVars, getLabel, getVar)
 import Context qualified (new)
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Maybe (mapMaybe)
 import Expr (Expr (Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
@@ -33,10 +34,11 @@ declarations decls = do
       more <- declarations (drop 1 decls)
       return $ ins ++ more
 
-funcDef :: Type -> Id -> [(Type, Id)] -> [Statement] -> State Context [Instruction]
+funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
 funcDef _ _ params body = do
   context <- get
-  let newContext = addVars params $ Context.new (Just context)
+  let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
+      newContext = addVars namedParams $ Context.new (Just context)
   put newContext
   ins <- statements body
   put context
