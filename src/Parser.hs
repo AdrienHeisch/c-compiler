@@ -133,11 +133,11 @@ statement = do
     TD.Break
       : TD.Semicolon
       : _ ->
-        make (Statement SD.Break) 3
+        make (Statement SD.Break) 2
     TD.Continue
       : TD.Semicolon
       : _ ->
-        make (Statement SD.Continue) 3
+        make (Statement SD.Continue) 2
     TD.Case
       : _ ->
         makeWith case_ 1
