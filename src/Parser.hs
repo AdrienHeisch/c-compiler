@@ -103,15 +103,15 @@ statement = do
     TD.If
       : TD.DelimOpen Dl.Pr
       : _ ->
-        makeWith if_ 1
+        makeWith if_ 2
     TD.Switch
       : TD.DelimOpen Dl.Pr
       : _ ->
-        makeWith switch 1
+        makeWith switch 2
     TD.While
       : TD.DelimOpen Dl.Pr
       : _ ->
-        makeWith while 1
+        makeWith while 2
     TD.Do
       : _ ->
         makeWith doWhile 1
