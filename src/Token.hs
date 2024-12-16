@@ -173,8 +173,8 @@ makeDef str = case str of
   "<<=" -> Op Op.LShiftAssign
   ">>" -> Op Op.RShift
   ">>=" -> Op Op.RShiftAssign
-  "->" -> Op Op.Member
-  "." -> Op Op.MemberPtr
+  "." -> Op Op.Member
+  "->" -> Op Op.MemberPtr
   "=" -> Op Op.Assign
   "," -> Op Op.Comma
   "?" -> Op Op.Ternary

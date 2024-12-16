@@ -23,7 +23,7 @@ reduceTokens tokens = case tokens of
       reduceTokens (Token TD.NL (cl |+| cr) : rest)
   Token (Token.Op Op.Lt) cl
     : Token (Token.Id (Id str)) _
-    : Token (Token.Op Op.MemberPtr) _
+    : Token (Token.Op Op.Member) _
     : Token (Token.Id (Id str')) _
     : Token (Token.Op Op.Gt) cr
     : rest ->
