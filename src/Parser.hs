@@ -434,9 +434,7 @@ expr tokens = case map Token.def tokens of
   TD.DelimOpen Dl.Br : _ ->
     let exs = exprList (collectArrayDecl tks)
      in Expr (ED.ArrayDecl exs) tokens
-  TD.DelimOpen Dl.Pr : _ ->
-    let (pr, rest) = runState collectParenthese tks
-     in exprNext (tk ++ pr) (ED.Parenthese (expr pr)) rest
+  TD.DelimOpen Dl.Pr : _ -> parentheses
   _ ->
     Expr (ED.Invalid ("Invalid expression : " ++ display tokens)) tokens
   where
@@ -453,6 +451,21 @@ expr tokens = case map Token.def tokens of
             Right _ ->
               let ex = expr tks
                in Expr (ED.UnopPre Op.Sizeof ex) tokens
+
+    parentheses :: Expr =
+      let ((mty, tyTks), rest) = runState getType tks
+       in case mty of
+            Left (ty, Nothing) ->
+              case map Token.def rest of
+                TD.DelimClose Dl.Pr : _ ->
+                  Expr (ED.UnopPre (Op.Cast ty) (expr $ drop 1 rest)) tokens
+                _ -> notType
+            Left (_, Just name) -> Expr (ED.Invalid $ "Unexpected identifier : " ++ show name) tyTks
+            Right _ -> notType
+      where
+        notType =
+          let (pr, rest) = runState collectParenthese tks
+           in exprNext (tk ++ pr) (ED.Parenthese (expr pr)) rest
 
 exprNext :: [Token] -> ExprDef -> [Token] -> Expr
 exprNext taken ex tokens = case map Token.def tokens of

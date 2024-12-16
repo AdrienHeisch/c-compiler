@@ -1,5 +1,8 @@
 module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr) where
 
+import Type (Type)
+import Type qualified (toStr)
+
 data Op
   = Not
   | AddOrPlus
@@ -41,6 +44,7 @@ data Op
   | Colon
   | Subscript
   | Sizeof
+  | Cast Type
   deriving (Show, Eq)
 
 unaryPre :: [Op]
@@ -257,3 +261,4 @@ toStr op = case op of
   Colon -> ":"
   Subscript -> "[]"
   Sizeof -> "sizeof"
+  Cast ty -> "(" ++ Type.toStr ty ++ ")"
