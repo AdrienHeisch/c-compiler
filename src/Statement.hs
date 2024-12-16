@@ -39,6 +39,7 @@ data StatementDef
   | Continue
   | Return (Maybe Expr)
   | Case (Constant IntRepr)
+  | Default
   | Goto Id
   | Labeled Id Statement
   | Ambiguous (Statement, Statement)

@@ -142,6 +142,10 @@ statement = do
     TD.Case
       : _ ->
         makeWith case_ 1
+    TD.Default
+      : TD.Op Op.Colon
+      : _ ->
+        make (Statement SD.Default) 2
     TD.Id name
       : TD.Op Op.Colon
       : _ ->
