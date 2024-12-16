@@ -21,10 +21,10 @@ instance Display Statement where
 data StatementDef
   = Empty
   | FuncDef Type Id [(Type, Maybe Id)]
-  | FuncDec Type Id [(Type, Maybe Id)] [Statement]
-  | Struct (Maybe Id) [(Type, Id)]
-  | Union (Maybe Id) [(Type, Id)]
-  | Enum (Maybe Id) Type [(Id, Maybe Expr)] -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
+  | FuncDec Type Id [(Type, Maybe Id)] [Statement] -- TODO use maybe to separate declaration and definition
+  | Struct (Maybe Id) [(Type, Id)] -- TODO use maybe to separate declaration and definition
+  | Union (Maybe Id) [(Type, Id)] -- TODO use maybe to separate declaration and definition
+  | Enum (Maybe Id) Type (Maybe [(Id, Maybe Expr)]) -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
   | Typedef Type Id
   | Expr Expr
   | Var (NonEmpty (Type, Id, Maybe Expr))
@@ -61,8 +61,10 @@ isTopLevel def = case def of
 instance Display StatementDef where
   display :: StatementDef -> String
   display statement = case statement of
+    FuncDef ty name params -> unwords ["FuncDef", show ty, show name, show params]
     FuncDec ty name params sts -> unwords ["FuncDec", show ty, show name, show params, display sts]
-    Enum name ty vars -> unwords ["Enum", show name, show ty, displayVariants vars]
+    Enum name ty Nothing -> unwords ["Enum", show name, show ty]
+    Enum name ty (Just vars) -> unwords ["Enum", show name, show ty, displayVariants vars]
     Expr e -> "Expr " ++ display e
     Var (var :| vars) -> unwords ("Var" : map displayVar (var : vars))
     If e st0 st1 -> unwords ["If", display e, display st0, display st1]

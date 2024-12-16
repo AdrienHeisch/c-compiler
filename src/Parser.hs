@@ -71,27 +71,8 @@ statement = do
     TD.Typedef
       : _ -> makeWith typedef 1
     TD.Enum
-      : TD.Id name
-      : TD.Op Op.Colon
-      : TD.Type ty
-      : TD.DelimOpen Dl.Br
       : _ -> do
-        makeWith (enum (Just name) ty) 5
-    TD.Enum
-      : TD.Op Op.Colon
-      : TD.Type ty
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        makeWith (enum Nothing ty) 4
-    TD.Enum
-      : TD.Id name
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        makeWith (enum (Just name) Ty.Int) 3
-    TD.Enum
-      : TD.DelimOpen Dl.Br
-      : _ ->
-        makeWith (enum Nothing Ty.Int) 2
+        makeWith enum 1
     TD.Struct
       : _ ->
         makeWith struct 1
@@ -609,7 +590,6 @@ struct taken = do
         TD.Semicolon : _ -> do
           modify $ drop 1
           return $ Statement (SD.Struct name fields) (taken ++ tokens ++ take 1 tokens')
-        [] -> return $ Statement (SD.Invalid "Unexpected end of file") (taken ++ tokens)
         _ -> declaration ty (tokens ++ [head tokens'])
     Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
 
@@ -624,7 +604,6 @@ union taken = do
         TD.Semicolon : _ -> do
           modify $ drop 1
           return $ Statement (SD.Union name fields) (taken ++ tokens ++ take 1 tokens')
-        [] -> return $ Statement (SD.Invalid "Unexpected end of file") (taken ++ tokens)
         _ -> declaration ty (tokens ++ [head tokens'])
     Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
 
@@ -672,18 +651,32 @@ structOrUnionFields tokens = validate $ evalState statementList $ Token.filterNL
 
     varToField (ty, name, _) = (ty, name)
 
-enum :: Maybe Id -> Type -> [Token] -> State [Token] Statement
-enum name ty taken = do
-  enumTks <- collectEnumVariants
+enum :: [Token] -> State [Token] Statement
+enum taken = do
   tokens <- get
-  case map Token.def tokens of
+  name <- case Token.def $ head tokens of
+    TD.Id name' -> do
+      modify $ drop 1
+      return $ Just name'
+    _ -> return Nothing
+  tokens' <- get
+  ty <- case map Token.def tokens' of
+    TD.Op Op.Colon : TD.Type ty : _ -> do
+      modify $ drop 2
+      return ty
+    _ -> return Ty.Int
+  tokens'' <- get
+  case map Token.def tokens'' of
     TD.Semicolon : _ -> do
       modify $ drop 1
+      return $ Statement (SD.Enum name ty Nothing) (taken ++ [head tokens''])
+    TD.DelimOpen Dl.Br : _ -> do
+      modify $ drop 1
+      enumTks <- collectEnumVariants
       case enumVariants enumTks of
-        Left variants -> return $ Statement (SD.Enum name ty variants) (taken ++ enumTks ++ [head tokens])
+        Left variants -> return $ Statement (SD.Enum name ty (Just variants)) (taken ++ enumTks ++ [head tokens''])
         Right err -> return $ Statement (SD.Invalid err) (taken ++ enumTks ++ [head tokens])
-    [] -> return $ Statement (SD.Invalid "Expected semicolon") (taken ++ enumTks ++ [head tokens])
-    tk : _ -> return $ Statement (SD.Invalid $ "Expected semicolon, got " ++ show tk) [head tokens]
+    _ -> declaration ty (tokens ++ [head tokens'])
 
 collectEnumVariants :: State [Token] [Token]
 collectEnumVariants = collectUntilDelimiter Dl.Br
