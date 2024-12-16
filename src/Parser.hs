@@ -94,6 +94,9 @@ statement = do
     TD.Struct
       : _ ->
         makeWith struct 1
+    TD.Union
+      : _ ->
+        makeWith union 1
     TD.Semicolon
       : _ ->
         make (Statement SD.Empty) 1
@@ -214,6 +217,12 @@ getType = do
     TD.Struct -> do
       modify $ drop 1
       (mty, tks) <- structType
+      case mty of
+        Right err -> return (Right err, tks)
+        Left ty -> makeType ty
+    TD.Union -> do
+      modify $ drop 1
+      (mty, tks) <- unionType
       case mty of
         Right err -> return (Right err, tks)
         Left ty -> makeType ty
@@ -559,7 +568,7 @@ collectStructFields = collectUntilDelimiter Dl.Br
 
 struct :: [Token] -> State [Token] Statement
 struct taken = do
-  (mty, tokens) <- structType
+  (mty, tokens) <- structOrUnionType Ty.Struct
   case mty of
     Right err -> return $ Statement (SD.Invalid err) tokens
     Left ty@(Ty.Struct name fields) -> do
@@ -572,8 +581,29 @@ struct taken = do
         _ -> declaration ty (tokens ++ [head tokens'])
     Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
 
+union :: [Token] -> State [Token] Statement
+union taken = do
+  (mty, tokens) <- structOrUnionType Ty.Union
+  case mty of
+    Right err -> return $ Statement (SD.Invalid err) tokens
+    Left ty@(Ty.Union name fields) -> do
+      tokens' <- get
+      case map Token.def tokens' of
+        TD.Semicolon : _ -> do
+          modify $ drop 1
+          return $ Statement (SD.Union name fields) (taken ++ tokens ++ take 1 tokens')
+        [] -> return $ Statement (SD.Invalid "Unexpected end of file") (taken ++ tokens)
+        _ -> declaration ty (tokens ++ [head tokens'])
+    Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
+
 structType :: State [Token] (Either Type String, [Token])
-structType = do
+structType = structOrUnionType Ty.Struct
+
+unionType :: State [Token] (Either Type String, [Token])
+unionType = structOrUnionType Ty.Union
+
+structOrUnionType ::  (Maybe Id -> [(Type, Id)] -> Type) -> State [Token] (Either Type String, [Token])
+structOrUnionType parser = do
   tokens <- get
   name <- case Token.def $ head tokens of
     TD.Id name' -> do
@@ -586,9 +616,9 @@ structType = do
       modify $ drop 1
       structTks <- collectStructFields
       case structFields structTks of
-        Left fields -> return (Left (Ty.Struct name fields), [head tokens, head tokens'] ++ structTks)
+        Left fields -> return (Left (parser name fields), [head tokens, head tokens'] ++ structTks)
         Right err -> return (Right err, structTks)
-    _ -> return (Left (Ty.Struct name []), take 1 tokens)
+    _ -> return (Left (parser name []), take 1 tokens)
 
 structFields :: [Token] -> Either [(Type, Id)] String
 structFields tokens = validate $ evalState statementList $ Token.filterNL tokens

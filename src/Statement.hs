@@ -23,6 +23,7 @@ data StatementDef
   | FuncDef Type Id [(Type, Maybe Id)]
   | FuncDec Type Id [(Type, Maybe Id)] [Statement]
   | Struct (Maybe Id) [(Type, Id)]
+  | Union (Maybe Id) [(Type, Id)]
   | Enum (Maybe Id) Type [(Id, Maybe Expr)] -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
   | Typedef Type Id
   | Expr Expr
@@ -49,6 +50,7 @@ isTopLevel def = case def of
   FuncDef {} -> True
   FuncDec {} -> True
   Struct {} -> True
+  Union {} -> True
   Enum {} -> True
   Typedef {} -> True
   Var {} -> True

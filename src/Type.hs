@@ -25,6 +25,7 @@ data Type
   | Array Type Int
   | ArrayNoHint Type
   | Struct (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
+  | Union (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
   | Enum (Maybe Id) Type -- TODO replace with underlying type ?
   | Typedef Id
   | FunctionPointer Type [Type]
@@ -130,6 +131,8 @@ toStr ty = case ty of
   ArrayNoHint ty' -> toStr ty' ++ " []"
   Struct Nothing fields -> "struct { " ++ show fields ++ " }"
   Struct (Just name) fields -> "struct " ++ Identifier.toStr name ++ " { " ++ show fields ++ " }"
+  Union Nothing fields -> "union { " ++ show fields ++ " }"
+  Union (Just name) fields -> "union " ++ Identifier.toStr name ++ " { " ++ show fields ++ " }"
   Enum Nothing ty' -> "enum : " ++ toStr ty'
   Enum (Just name) ty' -> "enum " ++ Identifier.toStr name ++ " : " ++ toStr ty'
   Typedef name -> Identifier.toStr name
