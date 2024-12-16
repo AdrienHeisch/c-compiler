@@ -17,7 +17,7 @@ import Statement (Statement (Statement), StatementDef)
 import Statement qualified (errs, isTopLevel)
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
-import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner)
+import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner, collectUntilWithDelimiters)
 import Token qualified (Token (..), filterNL, foldCrs)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
@@ -195,14 +195,18 @@ declaration spec taken = do
         Left (ty, Just name) -> do
           ex <- assign
           tokens <- get
-          case Token.def $ head tokens of
-            TD.Op Op.Comma -> do
+          case map Token.def $ take 1 tokens of
+            TD.Op Op.Comma : _ -> do
               modify $ drop 1
               (mdecls, dTks) <- go
               case mdecls of
                 Right err -> return (Right err, tks)
                 Left decls -> return (Left ((ty, name, ex) : decls), tks ++ dTks)
-            _ -> return (Left [(ty, name, ex)], tks)
+            TD.Semicolon : _ -> do
+              modify $ drop 1
+              return (Left [(ty, name, ex)], tks)
+            tk : _ -> return (Right $ "Expected semicolon, got : " ++ show tk, tks)
+            _ -> return (Right "Expected semicolon", tks)
 
 getType :: State [Token] (Either (Type, Maybe Id) String, [Token])
 getType = do
@@ -289,11 +293,9 @@ makeType spec = go spec Nothing False
 
 assign :: State [Token] (Maybe Expr)
 assign = do
-  tokens <- get
+  tokens <- collectUntilWithDelimiters [TD.Semicolon, TD.Op Op.Comma]
   case map Token.def tokens of
-    TD.Op Op.Assign : _ -> do
-      modify $ drop 1
-      return $ Just . expr $ drop 1 tokens
+    TD.Op Op.Assign : _ -> return $ Just . expr $ drop 1 tokens
     _ -> return Nothing
 
 if_ :: [Token] -> State [Token] Statement

@@ -279,31 +279,31 @@ collectUntil end = do
       tks' <- collectUntil end
       return $ tk : tks'
 
-collectUntilWithDelimiters :: [TokenDef] -> State [Token] ([Token], Maybe Token)
+collectUntilWithDelimiters :: [TokenDef] -> State [Token] [Token]
 collectUntilWithDelimiters seps = go (0, 0, 0)
   where
-    go :: (Int, Int, Int) -> State [Token] ([Token], Maybe Token)
+    go :: (Int, Int, Int) -> State [Token] [Token]
     go (pr, br, sqbr) = do
       tokens <- get
       case map def tokens of
-        [] -> return ([], Nothing)
-        DelimClose Delimiter.Pr : _ | pr == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        [] -> return []
+        DelimClose Delimiter.Pr : _ | pr == 0 -> do modify $ drop 1; return []
         DelimClose Delimiter.Pr : _ -> next (head tokens) (pr - 1, br, sqbr)
         DelimOpen Delimiter.Pr : _ -> next (head tokens) (pr + 1, br, sqbr)
-        DelimClose Delimiter.Br : _ | br == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        DelimClose Delimiter.Br : _ | br == 0 -> do modify $ drop 1; return[]
         DelimClose Delimiter.Br : _ -> next (head tokens) (pr, br - 1, sqbr)
         DelimOpen Delimiter.Br : _ -> next (head tokens) (pr, br + 1, sqbr)
-        DelimClose Delimiter.SqBr : _ | sqbr == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        DelimClose Delimiter.SqBr : _ | sqbr == 0 -> do modify $ drop 1; return []
         DelimClose Delimiter.SqBr : _ -> next (head tokens) (pr, br, sqbr - 1)
         DelimOpen Delimiter.SqBr : _ -> next (head tokens) (pr, br, sqbr + 1)
-        (tk : _) | tk `elem` seps && pr == 0 && br == 0 && sqbr == 0 -> do modify $ drop 1; return ([], Just $ head tokens)
+        (tk : _) | tk `elem` seps && pr == 0 && br == 0 && sqbr == 0 -> return []
         _ -> next (head tokens) (pr, br, sqbr)
 
-    next :: Token -> (Int, Int, Int) -> State [Token] ([Token], Maybe Token)
+    next :: Token -> (Int, Int, Int) -> State [Token] [Token]
     next tk depth = do
       modify $ drop 1
-      (tks, lastTk) <- go depth
-      return (tk : tks, lastTk)
+      tks <- go depth
+      return $ tk : tks
 
 collectUntilDelimiter :: Delimiter -> State [Token] [Token]
 collectUntilDelimiter del = go 0

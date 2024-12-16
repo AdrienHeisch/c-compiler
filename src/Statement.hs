@@ -54,6 +54,7 @@ isTopLevel def = case def of
   Enum {} -> True
   Typedef {} -> True
   Var {} -> True
+  Invalid {} -> True
   _ -> False
 
 instance Display StatementDef where
