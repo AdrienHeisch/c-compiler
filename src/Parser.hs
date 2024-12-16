@@ -7,9 +7,10 @@ import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (isJust, isNothing)
 import Delimiter qualified as Dl
-import Expr (Expr (Expr), ExprDef)
+import Expr (Expr (Expr), ExprDef, InitializerKind)
 import Expr qualified (Expr (..))
 import Expr qualified as ED (ExprDef (..))
+import Expr qualified as IK (InitializerKind (..))
 import Identifier (Id)
 import Op (Op)
 import Op qualified
@@ -17,7 +18,7 @@ import Statement (Statement (Statement), StatementDef)
 import Statement qualified (errs, isTopLevel)
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
-import Token (Token (Token), collectUntil, collectUntilDelimiter, parseListWithInner, collectUntilWithDelimiters)
+import Token (Token (Token), collectUntil, collectUntilDelimiter, collectUntilWithDelimiters, parseListWithInner)
 import Token qualified (Token (..), filterNL, foldCrs)
 import Token qualified as TD (TokenDef (..))
 import Type (Type)
@@ -443,8 +444,10 @@ expr tokens = case map Token.def tokens of
             Expr (ED.Binop (Expr (ED.UnopPre op left) tokens) bop right) tokens
           ex -> Expr (ED.UnopPre op ex) tokens
   TD.DelimOpen Dl.Br : _ ->
-    let exs = exprList (collectArrayDecl tks)
-     in Expr (ED.ArrayDecl exs) tokens
+    let listTks = collectInitializer tks
+     in case parseInitializer listTks of
+          Left items -> Expr (ED.Initializer items) tokens
+          Right err -> Expr (ED.Invalid err) tokens
   TD.DelimOpen Dl.Pr : _ -> parentheses
   _ ->
     Expr (ED.Invalid ("Invalid expression : " ++ display tokens)) tokens
@@ -491,8 +494,31 @@ exprNext taken ex tokens = case map Token.def tokens of
   where
     tks = taken ++ take 1 tokens
 
-collectArrayDecl :: [Token] -> [Token]
-collectArrayDecl = evalState (collectUntilDelimiter Dl.Br)
+collectInitializer :: [Token] -> [Token]
+collectInitializer = evalState (collectUntilDelimiter Dl.Br)
+
+parseInitializer :: [Token] -> Either [(InitializerKind, Expr)] String
+parseInitializer tokens =
+  let (tks, rest) = runState (collectUntilWithDelimiters [TD.Op Op.Comma]) tokens
+   in case parseOne tks of
+        Left item -> case map Token.def rest of
+          TD.Op Op.Comma : _ -> case parseInitializer (drop 1 rest) of
+            Left items -> Left $ item : items
+            Right err -> Right err
+          _ -> Left [item]
+        Right err -> Right err
+  where
+    parseOne :: [Token] -> Either (InitializerKind, Expr) String
+    parseOne tks =
+      case map Token.def tks of
+        TD.Op Op.Member : TD.Id name : TD.Op Op.Assign : _ ->
+          Left (IK.Field name, expr $ drop 3 tks)
+        TD.DelimOpen Dl.SqBr : _ ->
+          let (tks', rest') = runState (collectUntilDelimiter Dl.SqBr) $ drop 1 tks
+           in case map Token.def rest' of
+                TD.Op Op.Assign : _ -> Left (IK.Index $ expr tks', expr $ drop 1 rest')
+                tk -> Right $ "Expected =, got " ++ show tk
+        _ -> Left (IK.Simple, expr tks)
 
 collectParenthese :: State [Token] [Token]
 collectParenthese = collectUntilDelimiter Dl.Pr
@@ -604,7 +630,7 @@ structType = structOrUnionType Ty.Struct
 unionType :: State [Token] (Either Type String, [Token])
 unionType = structOrUnionType Ty.Union
 
-structOrUnionType ::  (Maybe Id -> [(Type, Id)] -> Type) -> State [Token] (Either Type String, [Token])
+structOrUnionType :: (Maybe Id -> [(Type, Id)] -> Type) -> State [Token] (Either Type String, [Token])
 structOrUnionType parser = do
   tokens <- get
   name <- case Token.def $ head tokens of
@@ -639,7 +665,7 @@ structOrUnionFields tokens = validate $ evalState statementList $ Token.filterNL
     makeField (SD.Struct Nothing fields) = Left fields
     makeField (SD.Union Nothing fields) = Left fields -- FIXME inner unions
     makeField st = Right $ "Invalid field : " ++ show st
-    
+
     varToField (ty, name, _) = (ty, name)
 
 enum :: Maybe Id -> Type -> [Token] -> State [Token] Statement

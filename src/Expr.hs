@@ -1,6 +1,7 @@
-module Expr (Expr (..), ExprDef (..), eval, errs) where
+module Expr (Expr (..), ExprDef (..), InitializerKind (..), eval, errs) where
 
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
+import Data.List (intercalate)
 import Identifier (Id)
 import Op (Op)
 import Token (Token, foldCrs)
@@ -21,14 +22,16 @@ eval expr = case Expr.def expr of
   IntLiteral (Constant ty _) -> ty
   FltLiteral (Constant ty _) -> ty
   StrLiteral (Constant ty _) -> ty
-  ArrayDecl [] -> error "Empty arrays evaluation not implemented"
-  ArrayDecl arr@(ex : _) -> Type.Array (eval ex) (length arr)
-  UnopPre op ex -> error "Unop evaluation not implemented"
-  UnopPost op ex -> error "Unop evaluation not implemented"
-  Binop left op right -> case eval left of -- TODO might be wrong ? divisions ?
+  Initializer [] -> Type.Void
+  Initializer _ -> error "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
+  UnopPre _ ex -> eval ex -- TODO probably wrong
+  UnopPost _ ex -> eval ex -- TODO probably wrong
+  Binop left _ right -> case eval left of -- TODO probably wrong
     Type.Infer -> eval right
     ty -> ty
-  Ternary ter_cond ter_then ter_else -> error "Ternary evaluation not implemented"
+  Ternary _ ter_then ter_else -> case eval ter_then of -- TODO probably wrong
+    Type.Infer -> eval ter_else
+    ty -> ty
   Call ex _ -> eval ex
   Parenthese ex -> eval ex
   SizeofType _ -> Type.Int
@@ -39,7 +42,7 @@ data ExprDef
   | IntLiteral (Constant IntRepr)
   | FltLiteral (Constant FltRepr)
   | StrLiteral (Constant StrRepr)
-  | ArrayDecl [Expr]
+  | Initializer [(InitializerKind, Expr)]
   | UnopPre {op :: Op, ex :: Expr}
   | UnopPost {op :: Op, ex :: Expr}
   | Binop {left :: Expr, op :: Op, right :: Expr}
@@ -53,7 +56,7 @@ data ExprDef
 instance Display ExprDef where
   display :: ExprDef -> String
   display expr = case expr of
-    ArrayDecl exs -> "Var ('" ++ display exs ++ ")"
+    Initializer exs -> "Initializer (" ++ intercalate ", " (map (\(ik, e) -> show ik ++ ": " ++ display e) exs) ++ ")"
     UnopPre op ex -> "UnopPre (" ++ unwords [show op, display ex] ++ ")"
     UnopPost op ex -> "UnopPost (" ++ unwords [show op, display ex] ++ ")"
     Binop left op right -> "Binop (" ++ unwords [display left, show op, display right] ++ ")"
@@ -67,9 +70,7 @@ errs = concatMap err
   where
     err :: Expr -> [String]
     err expr = case def expr of
-    -- isInvalid (Expr (Invalid _) _) = True
-    -- isInvalid _ = False
-      ArrayDecl exs -> errs exs
+      Initializer exs -> errs (map snd exs)
       UnopPre _ ex -> err ex
       UnopPost _ ex -> err ex
       Binop left _ right -> errs [left, right]
@@ -78,3 +79,9 @@ errs = concatMap err
       Parenthese ex -> err ex
       Invalid str -> [str ++ " at " ++ show (foldCrs $ tks expr)]
       _ -> []
+
+data InitializerKind
+  = Simple
+  | Field Id
+  | Index Expr
+  deriving (Show)
