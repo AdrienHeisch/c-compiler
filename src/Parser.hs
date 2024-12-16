@@ -427,8 +427,10 @@ expr tokens = case map Token.def tokens of
   TD.Op Op.Sizeof : TD.DelimOpen Dl.Pr : _ -> sizeof
   TD.Op op : _
     | Op.isUnaryPre op ->
-        let ex = expr tks
-         in Expr (ED.UnopPre op ex) tokens
+        case expr tks of
+          Expr (ED.Binop left bop right) _ ->
+            Expr (ED.Binop (Expr (ED.UnopPre op left) tokens) bop right) tokens
+          ex -> Expr (ED.UnopPre op ex) tokens
   TD.DelimOpen Dl.Br : _ ->
     let exs = exprList (collectArrayDecl tks)
      in Expr (ED.ArrayDecl exs) tokens
