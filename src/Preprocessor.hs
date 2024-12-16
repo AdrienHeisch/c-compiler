@@ -16,6 +16,7 @@ import Token qualified (collectUntil, collectUntilDelimiter, defToStr, errs, fil
 import Token qualified as TD (TokenDef (..))
 import Type qualified as Ty (Type (..))
 import Utils (Display(display), genErrs, mtransform)
+import Debug.Trace (trace)
 
 data Directive
   = Include Bool String
@@ -96,7 +97,7 @@ applyDirectives sourcePath directives = case directives of
 
 applyDirective :: FilePath -> Directive -> StateT [Token] IO [Token]
 applyDirective sourcePath directive = case directive of
-  Include True _ -> error "Standard library not implemented"
+  Include True _ -> do trace "STD import ignored" get -- FIXME error "Standard library not implemented"
   Include False fileName -> applyInclude sourcePath fileName
   Define name params template -> mtransform $ applyDefine name params template
   Invalid _ -> error $ "Invalid directive shouldn't be applied : " ++ show directive
@@ -105,7 +106,7 @@ parseInclude :: [Token] -> Directive
 parseInclude tokens = case map def tokens of
   [TD.Nil, TD.ImplInclude fileName] -> Include True fileName
   [TD.Nil, TD.StrLiteral (Constant _ fileName)] -> Include False fileName
-  _ -> Invalid "Invalid include"
+  tks -> Invalid $ "Invalid include " ++ show tks
 
 parseDefine :: [Token] -> Directive
 parseDefine tokens = case map def tokens of
