@@ -28,10 +28,7 @@ parse :: [Token] -> [Statement]
 parse tokens =
   let filtered = Token.filterNL tokens
       decls = evalState statementList (static filtered)
-      !_ = case Statement.errs decls of
-        [] -> ()
-        tkErrs -> error $ "Parser errors :\n" ++ intercalate "\n" tkErrs
-      !_ = case topLevelCheck decls of
+      !_ = case Statement.errs decls ++ topLevelCheck decls of
         [] -> ()
         errs -> error $ "Parser errors :\n" ++ intercalate "\n" errs
    in decls
@@ -331,7 +328,6 @@ while taken = do
   cond <- collectUntilDelimiter Dl.Pr
   body <- statement
   return $ Statement (SD.While (expr cond) body) (taken ++ cond ++ St.tks body)
-    _ -> return $ Statement (SD.Invalid "Expected (") taken
 
 doWhile :: [Token] -> State [Token] Statement
 doWhile taken = do
@@ -428,13 +424,14 @@ expr tokens = case map Token.def tokens of
     exprNext tk (ED.StrLiteral constant) tks
   TD.Id identifier : _ ->
     exprNext tk (ED.Id identifier) tks
+  TD.Op Op.Sizeof : TD.DelimOpen Dl.Pr : _ -> sizeof
   TD.Op op : _
     | Op.isUnaryPre op ->
         let ex = expr tks
-         in Expr (ED.UnopPre op ex) (tk ++ Expr.tks ex)
+         in Expr (ED.UnopPre op ex) tokens
   TD.DelimOpen Dl.Br : _ ->
     let exs = exprList (collectArrayDecl tks)
-     in Expr (ED.ArrayDecl exs) (tk ++ concatMap Expr.tks exs)
+     in Expr (ED.ArrayDecl exs) tokens
   TD.DelimOpen Dl.Pr : _ ->
     let (pr, rest) = runState collectParenthese tks
      in exprNext (tk ++ pr) (ED.Parenthese (expr pr)) rest
@@ -443,13 +440,25 @@ expr tokens = case map Token.def tokens of
   where
     (tk, tks) = splitAt 1 tokens
 
+    sizeof :: Expr =
+      let ((mty, tyTks), rest) = runState getType (drop 2 tokens)
+       in case mty of
+            Left (ty, Nothing) ->
+              case map Token.def rest of
+                TD.DelimClose Dl.Pr : _ -> Expr (ED.SizeofType ty) tokens
+                tk' -> Expr (ED.Invalid $ "Expected ), got : " ++ show tk') tyTks
+            Left (_, Just name) -> Expr (ED.Invalid $ "Unexpected identifier : " ++ show name) tyTks
+            Right _ ->
+              let ex = expr tks
+               in Expr (ED.UnopPre Op.Sizeof ex) tokens
+
 exprNext :: [Token] -> ExprDef -> [Token] -> Expr
 exprNext taken ex tokens = case map Token.def tokens of
   [] -> Expr ex taken
   [TD.Op op] | Op.isUnaryPost op -> Expr (ED.UnopPost op (Expr ex taken)) tks
-  (TD.Op op) : _ | Op.isBinary op -> binop tks ex op (expr (tail tokens))
-  (TD.DelimOpen Dl.SqBr) : _ -> binop tks ex Op.Subscript (expr (collectIndex (tail tokens)))
-  (TD.DelimOpen Dl.Pr) : _ ->
+  TD.Op op : _ | Op.isBinary op -> binop tks ex op (expr (tail tokens))
+  TD.DelimOpen Dl.SqBr : _ -> binop tks ex Op.Subscript (expr (collectIndex (tail tokens)))
+  TD.DelimOpen Dl.Pr : _ ->
     let args = collectArguments (tail tokens)
      in Expr (ED.Call (Expr ex taken) (exprList args)) (taken ++ take (1 + length args) tokens)
   _ -> Expr (ED.Invalid ("Invalid follow expression for " ++ display ex ++ " : " ++ display tokens)) tokens
@@ -497,7 +506,7 @@ collectParameters = do
     parameters :: [(Either (Type, Maybe Id) String, [Token])] -> Either [(Type, Maybe Id)] (String, [Token])
     parameters tyList = case tyList of
       [] -> Left []
-      (Left (ty, name), _) : rest -> 
+      (Left (ty, name), _) : rest ->
         case parameters rest of
           Left tys -> Left ((ty, name) : tys)
           Right (err, errTks) -> Right (err, errTks)

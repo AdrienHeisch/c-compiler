@@ -31,6 +31,7 @@ eval expr = case Expr.def expr of
   Ternary ter_cond ter_then ter_else -> error "Ternary evaluation not implemented"
   Call ex _ -> eval ex
   Parenthese ex -> eval ex
+  SizeofType _ -> Type.Int
   Invalid str -> error $ "Evaluating invalid expression : " ++ str
 
 data ExprDef
@@ -45,6 +46,7 @@ data ExprDef
   | Ternary {ter_cond :: Expr, ter_then :: Expr, ter_else :: Expr}
   | Call {ex :: Expr, args :: [Expr]}
   | Parenthese Expr
+  | SizeofType Type
   | Invalid String
   deriving (Show)
 
