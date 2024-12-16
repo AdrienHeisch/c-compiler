@@ -85,13 +85,13 @@ errs = concatMap err
       FuncDec _ _ _ sts -> Statement.errs sts
       Expr e -> Expr.errs [e]
       Var ((_, _, ex) :| vars) -> Expr.errs (catMaybes [ex]) ++ Expr.errs (mapMaybe (\(_, _, e) -> e) vars)
-      If e st0 (Just st1) -> Expr.errs [e] ++ errs [st0, st1]
+      If e st0 st1 -> Expr.errs [e] ++ errs (catMaybes [Just st0, st1])
       Switch e st -> Expr.errs [e] ++ errs [st]
       While e st -> Expr.errs [e] ++ errs [st]
       DoWhile st e -> Expr.errs [e] ++ errs [st]
-      For (Just e0) (Just e1) (Just e2) st -> Expr.errs [e0, e1, e2] ++ errs [st]
-      ForVar st0 (Just e0) (Just e1) st1 -> Expr.errs [e0, e1, e1] ++ errs [st0, st1]
-      Return (Just e) -> Expr.errs [e]
+      For e0 e1 e2 st -> Expr.errs (catMaybes [e0, e1, e2]) ++ errs [st]
+      ForVar st0 e0 e1 st1 -> Expr.errs (catMaybes [e0, e1]) ++ errs [st0, st1]
+      Return e -> Expr.errs (catMaybes [e])
       Block block -> concatMap err block
       Invalid str -> [str ++ " at " ++ show (Token.foldCrs $ tks statement)]
-      _ -> []
+      _ ->  []
