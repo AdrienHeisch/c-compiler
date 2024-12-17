@@ -263,7 +263,7 @@ makeType spec = go spec Nothing False
         TD.DelimOpen Dl.Pr -> do
           tys <- parseListWithInner (TD.Op Op.Comma) Dl.Pr getType
           case params tys of
-            Left ps -> return (Left (Ty.FunctionPointer ty ps, name), take 1 tokens)
+            Left ps -> return (Left (Ty.Pointer (Ty.Function ty ps), name), take 1 tokens) -- FIXME function returning pointer or pointer to function ?
             Right (err, errTks) -> return (Right err, errTks)
         _ -> return (Left (ty, name), take 1 tokens)
 

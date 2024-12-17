@@ -28,7 +28,7 @@ data Type
   | Union (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
   | Enum (Maybe Id) Type -- TODO replace with underlying type ?
   | Typedef Id
-  | FunctionPointer Type [Type]
+  | Function Type [Type]
   deriving (Show, Eq)
 
 signed :: Type -> Type
@@ -126,7 +126,6 @@ toStr ty = case ty of
   Float -> "float"
   Double -> "double"
   LDouble -> "long double"
-  Pointer ty' -> toStr ty' ++ " *"
   Array ty' arrlen -> toStr ty' ++ " [" ++ show arrlen ++ "]"
   ArrayNoHint ty' -> toStr ty' ++ " []"
   Struct Nothing fields -> "struct { " ++ show fields ++ " }"
@@ -136,4 +135,6 @@ toStr ty = case ty of
   Enum Nothing ty' -> "enum : " ++ toStr ty'
   Enum (Just name) ty' -> "enum " ++ Identifier.toStr name ++ " : " ++ toStr ty'
   Typedef name -> Identifier.toStr name
-  FunctionPointer ret tys -> toStr ret ++ "(*)(" ++ intercalate ", " (map toStr tys) ++ ")"
+  Function ret tys -> toStr ret ++ "*(" ++ intercalate ", " (map toStr tys) ++ ")"
+  Pointer (Function ret tys) -> toStr ret ++ "(*)(" ++ intercalate ", " (map toStr tys) ++ ")"
+  Pointer ty' -> toStr ty' ++ " *"

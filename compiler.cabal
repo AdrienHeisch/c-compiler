@@ -72,7 +72,6 @@ executable compiler
         Type,
         Identifier,
         Constant,
-        Declaration,
         Statement,
         Expr,
         Utils,

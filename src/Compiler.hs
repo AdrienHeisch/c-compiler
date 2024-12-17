@@ -102,7 +102,7 @@ var ty name mexpr = case mexpr of
 
 while :: Expr -> Statement -> State Context [Instruction]
 while cond body = do
-  let (rcond, _) = getTyRegs $ Expr.eval cond
+  let (rcond, _) = getTyRegs $ evalOrThrow cond
   insCond <- expr cond
   insBody <- statements [body]
   lblPre <- getLabel
@@ -129,11 +129,11 @@ expr e = case Expr.def e of
   ED.Binop left op right ->
     case (left, getBinaryAssignOp op) of
       (Expr (ED.Id name) _, Just innerOp) -> do
-        insBinop <- binop (Expr.eval e) left innerOp right
+        insBinop <- binop (evalOrThrow e) left innerOp right
         insAssign <- assign name right
         return $ insBinop ++ insAssign
       (_, Just _) -> error "Can't assign to constant"
-      (_, Nothing) -> binop (Expr.eval e) left op right
+      (_, Nothing) -> binop (evalOrThrow e) left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
   -- ED.Call ex args -> []
   ED.Parenthese ex -> expr ex
@@ -162,3 +162,6 @@ binop ty left op right = do
         Op.Div -> DIV r0 (Reg r1)
         _ -> error $ "Operator not implemented : " ++ show op
   return $ insR ++ [PUSH (Reg r0)] ++ insL ++ [POP r1, insOp]
+
+evalOrThrow :: Expr -> Type
+evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
