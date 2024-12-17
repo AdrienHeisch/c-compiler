@@ -10,7 +10,7 @@ import Expr (Expr (Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
 import Identifier (Id)
-import Instruction (Instruction (..), Program (..), Register (..), Value (..), getTyRegs)
+import Instruction (Instruction (..), Program (..), Register (..), Value (..),)
 import Op (getBinaryAssignOp)
 import Op qualified
 import Statement (Statement)
@@ -86,8 +86,7 @@ var ty name mexpr = case mexpr of
   Just ex -> do
     modify $ addVar (ty, name)
     ins <- expr ex
-    let (r0, _) = {- trace (show $ getTyRegs ty) $ trace (show ty) -} getTyRegs ty
-     in return $ ins ++ [PUSH (Reg r0)]
+    return $ ins ++ [PUSH (Reg R0)]
 
 -- if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
 -- if_ cond then_ else_ = do
@@ -102,12 +101,11 @@ var ty name mexpr = case mexpr of
 
 while :: Expr -> Statement -> State Context [Instruction]
 while cond body = do
-  let (rcond, _) = getTyRegs $ evalOrThrow cond
   insCond <- expr cond
   insBody <- statements [body]
   lblPre <- getLabel
   lblPost <- getLabel
-  return $ LABEL lblPre : insCond ++ [JEQ rcond (Lbl lblPost)] ++ insBody ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
+  return $ LABEL lblPre : insCond ++ [JEQ R0 (Lbl lblPost)] ++ insBody ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
 
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
@@ -115,11 +113,10 @@ expr e = case Expr.def e of
     context <- get
     case getVar context name of
       Nothing -> error $ "Undefined identifier : " ++ show name
-      Just (idx, ty) ->
-        let (r0, _) = getTyRegs ty
-         in return [SET r0 (Reg BP), ADD r0 (Cst idx), LOAD r0 (Reg r0)]
+      Just (idx, _) ->
+        return [SET R0 (Reg BP), ADD R0 (Cst idx), LOAD R0 (Reg R0)]
   ED.IntLiteral (Constant Type.Int int) -> do
-    return [SET I0 (Cst int)]
+    return [SET R0 (Cst int)]
   -- ED.FltLiteral flt -> []
   -- ED.StrLiteral str -> []
   -- ED.ArrayDecl exs -> []
@@ -145,23 +142,21 @@ assign name ex = do
   context <- get
   case getVar context name of
     Nothing -> error $ "Undefined identifier : " ++ show name
-    Just (idx, ty) -> do
+    Just (idx, _) -> do
       insEx <- expr ex
-      let (r0, r1) = getTyRegs ty
-       in return $ insEx ++ [SET r1 (Reg BP), ADD r1 (Cst idx), STORE r1 (Reg r0)]
+      return $ insEx ++ [SET R1 (Reg BP), ADD R1 (Cst idx), STORE R1 (Reg R0)]
 
 binop :: Type -> Expr -> Op.Op -> Expr -> State Context [Instruction]
-binop ty left op right = do
+binop _ left op right = do
   insL <- expr left
   insR <- expr right
-  let (r0, r1) = getTyRegs ty
   let insOp = case op of
-        Op.AddOrPlus -> ADD r0 (Reg r1)
-        Op.SubOrNeg -> SUB r0 (Reg r1)
-        Op.MultOrIndir -> MUL r0 (Reg r1)
-        Op.Div -> DIV r0 (Reg r1)
+        Op.AddOrPlus -> ADD R0 (Reg R1)
+        Op.SubOrNeg -> SUB R0 (Reg R1)
+        Op.MultOrIndir -> MUL R0 (Reg R1)
+        Op.Div -> DIV R0 (Reg R1)
         _ -> error $ "Operator not implemented : " ++ show op
-  return $ insR ++ [PUSH (Reg r0)] ++ insL ++ [POP r1, insOp]
+  return $ insR ++ [PUSH (Reg R0)] ++ insL ++ [POP R1, insOp]
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err

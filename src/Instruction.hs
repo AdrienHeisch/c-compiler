@@ -1,7 +1,5 @@
-module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen, getTyRegs) where
+module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen) where
 
-import Type (Type)
-import Type qualified (Type (..))
 import Utils (Display (display))
 import Text.Printf (printf)
 
@@ -82,54 +80,14 @@ data Register
   | SR
   | FR
   | PR
-  | C0
-  | C1
-  | S0
-  | S1
-  | I0
-  | I1
-  | L0
-  | L1
-  | F0
-  | F1
-  | D0
-  | D1
-  | P0
-  | P1
+  | R0
+  | R1
+  | R3
+  | R4
+  | R5
+  | R6
+  | R7
   deriving (Show, Enum)
 
-getTyRegs :: Type -> (Register, Register)
-getTyRegs ty
-  | ty `elem` [Type.Bool, Type.Char, Type.UChar] = (C0, C1)
-  | ty `elem` [Type.Short, Type.UShort] = (S0, S1)
-  | ty `elem` [Type.Int, Type.UInt] = (I0, I1)
-  | ty `elem` [Type.Long, Type.ULong] = (L0, L1)
-  -- | ty `elem` [Type.LLong, Type.ULLong] = (L0, L1)
-  | ty == Type.Float = (F0, F1)
-  | ty == Type.Double = (D0, D1)
-  -- | ty == Type.LDouble = (D0, D1)
-  | otherwise = error $ "No general use register for type : " ++ show ty
-
-regLen :: (Num a) => Register -> a
-regLen reg = case reg of
-  PC -> 8
-  SP -> 8
-  BP -> 8
-  RR -> 8
-  SR -> 8
-  FR -> 1
-  PR -> 8
-  C0 -> 1
-  C1 -> 1
-  S0 -> 2
-  S1 -> 2
-  I0 -> 4
-  I1 -> 4
-  L0 -> 8
-  L1 -> 8
-  F0 -> 4
-  F1 -> 4
-  D0 -> 8
-  D1 -> 8
-  P0 -> 8
-  P1 -> 8
+regLen :: Int
+regLen = 8

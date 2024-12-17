@@ -147,7 +147,7 @@ asmRR op (Just reg) val = [regFlag op, intoByte (regToInt reg), intoByte val]
 
 asmRC :: Word8 -> Maybe Register -> Int -> [Word8]
 asmRC op Nothing val = op : 0 : intoByteArray val 8
-asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoByteArray val (regLen reg)
+asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoByteArray val regLen
 
 regFlag :: Word8 -> Word8
 regFlag = (.|.) (0b10000000 :: Word8)
@@ -167,7 +167,7 @@ getLabel lbl = do
   return $ labels !! lbl
 
 newLabel :: Int -> AsmState ()
-newLabel lbl = do -- TODO remove this parameter and related code in compiler
+newLabel _lbl = do -- TODO remove this parameter and related code in compiler
   (pc, labels) <- get
   let newLabels = labels ++ [pc]
   put (pc, newLabels)
