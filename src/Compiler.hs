@@ -17,6 +17,7 @@ import Statement (Statement)
 import Statement qualified
 import Statement qualified as SD (StatementDef (..))
 import Type (Type (Int))
+import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
 compile decls = Program $ evalState (declarations decls) (Context.new Nothing)
@@ -58,7 +59,7 @@ statement st = case Statement.def st of
   SD.Block block -> statements block
   SD.Expr e -> expr e
   SD.Var (v :| vs) -> vars (v : vs)
-  -- SD.If cond then_ else_ -> if_ cond then_ else_
+  SD.If cond then_ else_ -> if_ cond then_ else_
   -- SD.Switch {eval :: Expr, body :: Statement} ->
   SD.While cond body -> while cond body
   -- SD.DoWhile {body :: Statement, cond :: Expr} ->
@@ -88,16 +89,20 @@ var ty name mexpr = case mexpr of
     ins <- expr ex
     return $ ins ++ [PUSH (Reg R0)]
 
--- if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
--- if_ cond then_ else_ = do
---   let rcond = case Expr.eval cond of
---         Type.Int -> I0
---         ty -> error $ "Type not implemented in binop : " ++ show ty
---   econd <- expr cond
---   return
---     [ {- econd,
---       JEQ rcond  -}
---     ]
+if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
+if_ cond then_ else_ = do
+  lblElse <- getLabel
+  lblPost <- getLabel
+  insCond <- expr cond
+  insThen <- statement then_
+  insElse <- maybe (return Nothing) (fmap Just . statement) else_
+  return $
+    insCond
+      ++ [JEQ R0 (Lbl lblElse)]
+      ++ insThen
+      ++ [JMP (Lbl lblPost), LABEL lblElse]
+      ++ maybeListToList insElse
+      ++ [LABEL lblPost]
 
 while :: Expr -> Statement -> State Context [Instruction]
 while cond body = do

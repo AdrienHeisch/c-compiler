@@ -15,6 +15,10 @@ listToMaybeList :: [a] -> Maybe [a]
 listToMaybeList [] = Nothing
 listToMaybeList xs = Just xs
 
+maybeListToList :: Maybe [a] -> [a]
+maybeListToList Nothing = []
+maybeListToList (Just xs) = xs
+
 mapFst :: (t -> a) -> (t, b) -> (a, b)
 mapFst f (a, b) = (f a, b)
 
