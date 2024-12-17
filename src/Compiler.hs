@@ -62,7 +62,7 @@ statement st = case Statement.def st of
   SD.If cond then_ else_ -> if_ cond then_ else_
   -- SD.Switch {eval :: Expr, body :: Statement} ->
   SD.While cond body -> while cond body
-  -- SD.DoWhile {body :: Statement, cond :: Expr} ->
+  SD.DoWhile body cond -> dowhile cond body
   -- SD.For {finit :: Maybe Expr, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement} ->
   -- SD.ForVar {fdecl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement} ->
   -- SD.Break ->
@@ -106,11 +106,19 @@ if_ cond then_ else_ = do
 
 while :: Expr -> Statement -> State Context [Instruction]
 while cond body = do
-  insCond <- expr cond
-  insBody <- statements [body]
   lblPre <- getLabel
   lblPost <- getLabel
+  insCond <- expr cond
+  insBody <- statements [body]
   return $ LABEL lblPre : insCond ++ [JEQ R0 (Lbl lblPost)] ++ insBody ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
+
+dowhile :: Expr -> Statement -> State Context [Instruction]
+dowhile cond body = do
+  lblPre <- getLabel
+  lblPost <- getLabel
+  insCond <- expr cond
+  insBody <- statements [body]
+  return $ LABEL lblPre : insBody ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
 
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
