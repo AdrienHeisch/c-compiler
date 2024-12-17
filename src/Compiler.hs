@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, addVar, addVars, getLabel, getVar)
+import Context (Context, addVar, addVars, anonLabel, getVar, addLabel, getLabel)
 import Context qualified (new)
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -9,7 +9,7 @@ import Data.Maybe (mapMaybe)
 import Expr (Expr (Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
-import Identifier (Id)
+import Identifier (Id(..))
 import Instruction (Instruction (..), Program (..), Register (..), Value (..))
 import Op (getBinaryAssignOp)
 import Op qualified
@@ -20,7 +20,7 @@ import Type (Type (Int))
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
-compile decls = Program $ evalState (declarations decls) (Context.new Nothing)
+compile decls = Program $ {- JMP (Lbl 0) :  -}evalState (declarations decls) (Context.new Nothing)
 
 declarations :: [Statement] -> State Context [Instruction]
 declarations decls = do
@@ -37,13 +37,14 @@ declarations decls = do
 
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
 funcDef _ _ params body = do
+  -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
   context <- get
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
       newContext = addVars namedParams $ Context.new (Just context)
   put newContext
   ins <- statements body
   put context
-  return $ SET BP (Reg SP) : ins
+  return $ [{- LABEL lbl,  -}NOP, SET BP (Reg SP)] ++ ins
 
 statements :: [Statement] -> State Context [Instruction]
 statements sts = case sts of
@@ -69,8 +70,8 @@ statement st = case Statement.def st of
   -- SD.Continue ->
   -- SD.Return (Maybe Expr) ->
   -- SD.Case (Constant IntRepr) ->
-  -- SD.Goto Id ->
-  -- SD.Labeled Id Statement ->
+  SD.Goto lblName -> goto lblName
+  SD.Labeled lblName st' -> label lblName st'
   SD.Invalid str -> error $ "Invalid statement : " ++ str
   _ -> error $ "Statement not implemented yet : " ++ display st
   where
@@ -91,8 +92,8 @@ var ty name mexpr = case mexpr of
 
 if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
 if_ cond then_ else_ = do
-  lblElse <- getLabel
-  lblPost <- getLabel
+  lblElse <- anonLabel
+  lblPost <- anonLabel
   insCond <- expr cond
   insThen <- statement then_
   insElse <- maybe (return Nothing) (fmap Just . statement) else_
@@ -102,23 +103,37 @@ if_ cond then_ else_ = do
       ++ insThen
       ++ [JMP (Lbl lblPost), LABEL lblElse]
       ++ maybeListToList insElse
-      ++ [LABEL lblPost]
+      ++ [LABEL lblPost] -- TODO avoid double label if no else
 
 while :: Expr -> Statement -> State Context [Instruction]
 while cond body = do
-  lblPre <- getLabel
-  lblPost <- getLabel
+  lblPre <- anonLabel
+  lblPost <- anonLabel
   insCond <- expr cond
   insBody <- statements [body]
   return $ LABEL lblPre : insCond ++ [JEQ R0 (Lbl lblPost)] ++ insBody ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
 
 dowhile :: Expr -> Statement -> State Context [Instruction]
 dowhile cond body = do
-  lblPre <- getLabel
-  lblPost <- getLabel
+  lblPre <- anonLabel
+  lblPost <- anonLabel
   insCond <- expr cond
   insBody <- statements [body]
   return $ LABEL lblPre : insBody ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
+
+goto :: Id -> State Context [Instruction]
+goto (Id lblName) = do
+  context <- get
+  let mlbl = getLabel context lblName
+  case mlbl of
+      Nothing -> error $ "Undefined label : " ++ show lblName
+      Just lbl -> return [JMP (Lbl lbl)]
+
+label :: Id -> Statement -> State Context [Instruction]
+label (Id lblName) st = do
+  lbl <- addLabel lblName
+  ins <- statement st
+  return $ LABEL lbl : ins
 
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
@@ -164,12 +179,12 @@ binop _ left op right = do
   insL <- expr left
   insR <- expr right
   let insOp = case op of
-        Op.AddOrPlus -> ADD R0 (Reg R1)
-        Op.SubOrNeg -> SUB R0 (Reg R1)
-        Op.MultOrIndir -> MUL R0 (Reg R1)
-        Op.Div -> DIV R0 (Reg R1)
+        Op.AddOrPlus -> ADD R0 (Reg R4)
+        Op.SubOrNeg -> SUB R0 (Reg R4)
+        Op.MultOrIndir -> MUL R0 (Reg R4)
+        Op.Div -> DIV R0 (Reg R4)
         _ -> error $ "Operator not implemented : " ++ show op
-  return $ insR ++ [PUSH (Reg R0)] ++ insL ++ [POP R1, insOp]
+  return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ [insOp]
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
