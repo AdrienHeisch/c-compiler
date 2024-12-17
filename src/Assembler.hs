@@ -7,42 +7,31 @@ import Instruction (Instruction (..), Program (..), Register, Value (..), regLen
 
 type AsmState = State (Int, [Int])
 
-type PartialJmp = (Word8, Maybe Register, Int)
-
 assemble :: Program -> [Word8]
-assemble (Program ins) = evalState (firstPass ins >>= secondPass) (0, [])
+assemble (Program ins) = evalState (firstPass ins >> secondPass ins) (0, [])
 
-pcAdd :: Num a => a -> (a, b) -> (a, b)
+pcAdd :: (Num a) => a -> (a, b) -> (a, b)
 pcAdd n st = let (pc, lbls) = st in (pc + n, lbls)
 
-secondPass :: [Either [Word8] PartialJmp] -> AsmState [Word8]
+firstPass :: [Instruction] -> AsmState ()
+firstPass ins = case ins of
+  [] -> return ()
+  (LABEL l : rest) -> do
+    newLabel l
+    firstPass rest
+  (_ : rest) -> do
+    modify $ pcAdd 1
+    firstPass rest
+
+secondPass :: [Instruction] -> AsmState [Word8]
 secondPass ins = case ins of
   [] -> return []
-  (Left bytes : rest) -> do
+  (instr : rest) -> do
+    bytes <- bytecode instr
     rest' <- secondPass rest
     return $ bytes ++ rest'
-  (Right (op, reg, lbl) : rest) -> do
-    rest' <- secondPass rest
-    addr <- getLabel lbl
-    return $ asmRC op reg addr ++ rest'
 
-firstPass :: [Instruction] -> AsmState [Either [Word8] PartialJmp]
-firstPass ins = case ins of
-  [] -> return []
-  (instr : rest) -> do
-    mbytes <- bytecode instr
-    case mbytes of
-      Nothing -> firstPass rest
-      Just bytes -> do
-        modify $ pcAdd 1
-        rest' <- firstPass rest
-        return $ bytes : rest'
-        -- return $ transform bytes ++ rest'
-  -- where
-    -- transform (Left bytes) = map Left bytes
-    -- transform (Right jmp) = [Right jmp]
-
-bytecode :: Instruction -> AsmState (Maybe (Either [Word8] PartialJmp))
+bytecode :: Instruction -> AsmState [Word8]
 bytecode instr = case instr of
   NOP -> make 0x00
   HALT (Reg r) -> makeR 0x01 r
@@ -127,19 +116,21 @@ bytecode instr = case instr of
   EPRINT (Reg r) -> makeR 0x2A r
   EPRINT (Cst c) -> makeC 0x2A c
   DUMP -> make 0x2B
-  LABEL l -> do
-    newLabel l
-    return Nothing
+  LABEL _ -> return []
   _ -> error $ "Invalid operation : " ++ show instr
   where
-    make op = return $ Just $ Left $ asmRR op Nothing (0 :: Int)
-    makeR op r = return $ Just $ Left $ asmRR op (Just r) (0 :: Int)
-    makeRR op r r' = return $ Just $ Left $ asmRR op (Just r) (regToInt r')
-    makeC op c = return $ Just $ Left $ asmRC op Nothing c
-    makeRC op r c = return $ Just $ Left $ asmRC op (Just r) c
+    make op = return $ asmRR op Nothing (0 :: Int)
+    makeR op r = return $ asmRR op (Just r) (0 :: Int)
+    makeRR op r r' = return $ asmRR op (Just r) (regToInt r')
+    makeC op c = return $ asmRC op Nothing c
+    makeRC op r c = return $ asmRC op (Just r) c
 
-    makeL op l = return $ Just $ Right (op, Nothing, l)
-    makeRL op r l = return $ Just $ Right (op, Just r, l)
+    makeL op l = do
+      addr <- getLabel l
+      return $ asmRC op Nothing addr
+    makeRL op r l = do
+      addr <- getLabel l
+      return $ asmRC op (Just r) addr
 
 asmRR :: Word8 -> Maybe Register -> Int -> [Word8]
 asmRR op Nothing val = [regFlag op, 0, intoByte val]
@@ -152,7 +143,7 @@ asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoByteArray val regLe
 regFlag :: Word8 -> Word8
 regFlag = (.|.) (0b10000000 :: Word8)
 
-intoByte :: Integral a => a -> Word8
+intoByte :: (Integral a) => a -> Word8
 intoByte n = fromIntegral n :: Word8
 
 intoByteArray :: (Integral a1, Bits a1, Num a2) => a1 -> Int -> [a2]
@@ -167,7 +158,8 @@ getLabel lbl = do
   return $ labels !! lbl
 
 newLabel :: Int -> AsmState ()
-newLabel _lbl = do -- TODO remove this parameter and related code in compiler
+newLabel _lbl = do
+  -- TODO remove this parameter and related code in compiler
   (pc, labels) <- get
   let newLabels = labels ++ [pc]
   put (pc, newLabels)
