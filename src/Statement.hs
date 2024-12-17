@@ -61,18 +61,18 @@ isTopLevel def = case def of
 instance Display StatementDef where
   display :: StatementDef -> String
   display statement = case statement of
-    FuncDef ty name params -> unwords ["FuncDef", show ty, show name, show params]
-    FuncDec ty name params sts -> unwords ["FuncDec", show ty, show name, show params, display sts]
-    Enum name ty Nothing -> unwords ["Enum", show name, show ty]
-    Enum name ty (Just vars) -> unwords ["Enum", show name, show ty, displayVariants vars]
+    FuncDef ty name params -> unwords ["FuncDef (", show ty, show name, show params, ")"]
+    FuncDec ty name params sts -> unwords ["FuncDec (", show ty, show name, show params, display sts, ")"]
+    Enum name ty Nothing -> unwords ["Enum (", show name, show ty, ")"]
+    Enum name ty (Just vars) -> unwords ["Enum (", show name, show ty, displayVariants vars, ")"]
     Expr e -> "Expr " ++ display e
     Var (var :| vars) -> unwords ("Var" : map displayVar (var : vars))
-    If e st0 st1 -> unwords ["If", display e, display st0, display st1]
-    Switch e st -> unwords ["Switch", display e, display st]
-    While e st -> unwords ["While", display e, display st]
-    DoWhile st e -> unwords ["DoWhile", display st, display e]
-    For e0 e1 e2 st -> unwords ["ForVar", display e0, display e1, display e1, display e2, display st]
-    ForVar st0 e0 e1 st1 -> unwords ["ForVar", display st0, display e0, display e1, display e1, display st1]
+    If e st0 st1 -> unwords ["If (", display e, display st0, display st1, ")"]
+    Switch e st -> unwords ["Switch (", display e, display st, ")"]
+    While e st -> unwords ["While (", display e, display st, ")"]
+    DoWhile st e -> unwords ["DoWhile (", display st, display e, ")"]
+    For e0 e1 e2 st -> unwords ["ForVar (", display e0, display e1, display e1, display e2, display st, ")"]
+    ForVar st0 e0 e1 st1 -> unwords ["ForVar (", display st0, display e0, display e1, display e1, display st1, ")"]
     Return e -> "Return " ++ display e
     Block block -> "Block " ++ display block
     _ -> show statement

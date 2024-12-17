@@ -10,7 +10,7 @@ import Expr (Expr (Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
 import Identifier (Id)
-import Instruction (Instruction (..), Program (..), Register (..), Value (..),)
+import Instruction (Instruction (..), Program (..), Register (..), Value (..))
 import Op (getBinaryAssignOp)
 import Op qualified
 import Statement (Statement)
@@ -72,7 +72,7 @@ statement st = case Statement.def st of
   -- SD.Goto Id ->
   -- SD.Labeled Id Statement ->
   SD.Invalid str -> error $ "Invalid statement : " ++ str
-  _ -> error $ "Statement not implemented yet : " ++ show st
+  _ -> error $ "Statement not implemented yet : " ++ display st
   where
     vars :: [(Type, Id, Maybe Expr)] -> State Context [Instruction]
     vars vs = do
