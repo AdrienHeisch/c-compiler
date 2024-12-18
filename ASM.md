@@ -39,34 +39,35 @@ With N being a register, a constant or eventually a label
 0x0D	SUB RX N			Subtract N from RX
 0x0E	MUL RX N			Multiply RX and N
 0x0F	DIV RX N			Divide RX with N
-0x10	NOT RX _			Perform a bitwise NOT operation in RX
-0x11	AND RX N			Perform a bitwise AND operation between RX and N
-0x12	OR RX N				Perform a bitwise OR operation between RX and N
-0x13	XOR RX N			Perform a bitwise XOR operation between RX and N
-0x14	NAND RX N			Perform a bitwise NAND operation between RX and N
-0x15	NOR RX N			Perform a bitwise NOR operation between RX and N
-0x16	NXOR RX N			Perform a bitwise NXOR operation between RX and N
-0x17	SHL RX N			Shift the bits in register RX left by N positions
-0x18	SHR RX N			Shift the bits in register RX right by N positions
-0x19	RCL RX N			Rotate the bits in RX left by N positions with carN
-0x1A	RCR RX N			Rotate the bits in RX right by N positions with carN
-0x1B	BSWAP RX _			Swap the byte order of the value in RX
-0x1C	PUSH _ N			Push N onto the stack
-0x1D	DUP _ N				Duplicate the value at address N and push it onto the stack
-0x1E	POP RX _			Pop the top value from the stack into RX
-0x1F	DROP _ _			Pop the top value from the stack and discard it
-0x20	CALL _ N			Call a subroutine at address N
-0x21	RET _ _				Return the value from the subroutine
-0x22	JMP _ N				Jump to instruction N
-0x23	JEQ RX N			Jump if RX is equal to zero
-0x24	JNE RX N			Jump if RX is not equal to zero
-0x25	JGT RX N			Jump if RX is greater than zero
-0x26	JGE RX N			Jump if RX is greater than or equal to zero
-0x27	JLT RX N			Jump if RX is lesser than zero
-0x28	JLE RX N			Jump if RX is lesser than or equal to zero
-0x29	PRINT RX _			Print the value of RX to stdout
-0x2A	EPRINT RX _			Print the value of RX to stderr
-0x2B	DUMP _ _			Print the value of all registers to strerr
+0x10	DIV RX N			Divide RX with N
+0x11	NOT RX _			Perform a bitwise NOT operation in RX
+0x12	AND RX N			Perform a bitwise AND operation between RX and N
+0x13	OR RX N				Perform a bitwise OR operation between RX and N
+0x14	XOR RX N			Perform a bitwise XOR operation between RX and N
+0x15	NAND RX N			Perform a bitwise NAND operation between RX and N
+0x16	NOR RX N			Perform a bitwise NOR operation between RX and N
+0x17	NXOR RX N			Perform a bitwise NXOR operation between RX and N
+0x18	SHL RX N			Shift the bits in register RX left by N positions
+0x19	SHR RX N			Shift the bits in register RX right by N positions
+0x1A	RCL RX N			Rotate the bits in RX left by N positions with carN
+0x1B	RCR RX N			Rotate the bits in RX right by N positions with carN
+0x1C	BSWAP RX _			Swap the byte order of the value in RX
+0x1D	PUSH _ N			Push N onto the stack
+0x1E	DUP _ N				Duplicate the value at address N and push it onto the stack
+0x1F	POP RX _			Pop the top value from the stack into RX
+0x20	DROP _ _			Pop the top value from the stack and discard it
+0x21	CALL _ N			Call a subroutine at address N
+0x22	RET _ _				Return the value from the subroutine
+0x23	JMP _ N				Jump to instruction N
+0x24	JEQ RX N			Jump if RX is equal to zero
+0x25	JNE RX N			Jump if RX is not equal to zero
+0x26	JGT RX N			Jump if RX is greater than zero
+0x27	JGE RX N			Jump if RX is greater than or equal to zero
+0x28	JLT RX N			Jump if RX is lesser than zero
+0x29	JLE RX N			Jump if RX is lesser than or equal to zero
+0x2A	PRINT RX _			Print the value of RX to stdout
+0x2B	EPRINT RX _			Print the value of RX to stderr
+0x2C	DUMP _ _			Print the value of all registers to strerr
 
 # Encoding
 

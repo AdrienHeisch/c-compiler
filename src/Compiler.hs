@@ -200,6 +200,7 @@ binop _ left op right = do
         Op.SubOrNeg -> SUB R0 (Reg R4)
         Op.MultOrIndir -> MUL R0 (Reg R4)
         Op.Div -> DIV R0 (Reg R4)
+        Op.Mod -> MOD R0 (Reg R4)
         _ -> error $ "Operator not implemented : " ++ show op
   return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ [insOp]
 

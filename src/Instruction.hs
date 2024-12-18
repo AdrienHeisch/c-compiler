@@ -1,7 +1,7 @@
-module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen) where
+module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen, toOpCode) where
 
-import Utils (Display (display))
 import Text.Printf (printf)
+import Utils (Display (display))
 
 newtype Program = Program [Instruction]
   deriving (Show)
@@ -34,6 +34,7 @@ data Instruction
   | SUB Register Value
   | MUL Register Value
   | DIV Register Value
+  | MOD Register Value
   | NOT Register
   | AND Register Value
   | OR Register Value
@@ -89,5 +90,54 @@ data Register
   | R7
   deriving (Show, Enum)
 
-regLen :: Int
+regLen :: (Num a) => a
 regLen = 8
+
+toOpCode :: (Num a) => Instruction -> a
+toOpCode ins = case ins of
+  NOP -> 0x00
+  HALT _ -> 0x01
+  SYCALL _ -> 0x02
+  CLEAR _ -> 0x03
+  SET _ _ -> 0x04
+  LOAD _ _ -> 0x05
+  STORE _ _ -> 0x06
+  SWAP _ _ -> 0x07
+  CMP _ _ -> 0x08
+  NEG _ -> 0x09
+  INC _ -> 0x0A
+  DEC _ -> 0x0B
+  ADD _ _ -> 0x0C
+  SUB _ _ -> 0x0D
+  MUL _ _ -> 0x0E
+  DIV _ _ -> 0x0F
+  MOD _ _ -> 0x10
+  NOT _ -> 0x11
+  AND _ _ -> 0x12
+  OR _ _ -> 0x13
+  XOR _ _ -> 0x14
+  NAND _ _ -> 0x15
+  NOR _ _ -> 0x16
+  NXOR _ _ -> 0x17
+  SHL _ _ -> 0x18
+  SHR _ _ -> 0x19
+  RCL _ _ -> 0x1A
+  RCR _ _ -> 0x1B
+  BSWAP _ -> 0x1C
+  PUSH _ -> 0x1D
+  DUP _ -> 0x1E
+  POP _ -> 0x1F
+  DROP -> 0x20
+  CALL _ -> 0x21
+  RET _ -> 0x22
+  JMP _ -> 0x23
+  JEQ _ _ -> 0x24
+  JNE _ _ -> 0x25
+  JGT _ _ -> 0x26
+  JGE _ _ -> 0x27
+  JLT _ _ -> 0x28
+  JLE _ _ -> 0x29
+  PRINT _ -> 0x2A
+  EPRINT _ -> 0x2B
+  DUMP -> 0x2C
+  _ -> error "Not opcode"
