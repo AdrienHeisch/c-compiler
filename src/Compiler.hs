@@ -20,31 +20,7 @@ import Type (Type (Int))
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
-compile decls = Program $ {- JMP (Lbl 0) :  -}evalState (declarations decls) Context.new
-
-declarations :: [Statement] -> State Context [Instruction]
-declarations decls = do
-  case map Statement.def decls of
-    [] -> return []
-    SD.FuncDec ty name params body : _ -> do ins <- funcDef ty name params body; go ins
-    -- DD.FuncDef ty name params : _ -> do ins <- funcDef ty name params; go ins
-    SD.Invalid str : _ -> error $ "Invalid definition : " ++ str
-    _ -> error $ "Declaration not implemented yet : " ++ show (head decls)
-  where
-    go ins = do
-      more <- declarations (drop 1 decls)
-      return $ ins ++ more
-
-funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
-funcDef _ _ params body = do
-  -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
-  context <- get
-  let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
-  put $ Context.newFunction context
-  Context.addVars namedParams
-  ins <- statements body
-  put context
-  return $ [{- LABEL lbl,  -}NOP, SET BP (Reg SP)] ++ ins
+compile decls = Program $ {- JMP (Lbl 0) :  -}evalState (statements decls) Context.new
 
 statements :: [Statement] -> State Context [Instruction]
 statements sts = case sts of
@@ -57,6 +33,7 @@ statements sts = case sts of
 statement :: Statement -> State Context [Instruction]
 statement st = case Statement.def st of
   SD.Empty -> return []
+  SD.FuncDec ty name params body -> funcDef ty name params body
   SD.Block block -> statements block
   SD.Expr e -> expr e
   SD.Var (v :| vs) -> vars (v : vs)
@@ -79,6 +56,17 @@ statement st = case Statement.def st of
     vars vs = do
       ins <- mapM (\(ty, name, e) -> var ty name e) vs
       return . concat $ ins
+
+funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
+funcDef _ _ params body = do
+  -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
+  context <- get
+  let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
+  put $ Context.newFunction context
+  Context.addVars namedParams
+  ins <- statements body
+  put context
+  return $ [{- LABEL lbl,  -}NOP, SET BP (Reg SP)] ++ ins
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = case mexpr of
