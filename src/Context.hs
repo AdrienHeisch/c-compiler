@@ -1,4 +1,4 @@
-module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc) where
+module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc) where
 
 import Control.Monad.State.Lazy (State, get, put)
 import Data.List (find, findIndex)
@@ -38,7 +38,7 @@ addVars vars = case vars of
 
 addVar :: (Type, Id) -> State Context ()
 addVar (ty, name) = do
-  mvar <- findVar name False
+  mvar <- findVar False name
   case mvar of
     Nothing -> do
       Context f vars l a p <- get
@@ -46,14 +46,14 @@ addVar (ty, name) = do
     Just _ -> error $ "Redefinition of " ++ Id.toStr name
 
 getVar :: Id -> State Context (Maybe (Int, Type))
-getVar name = findVar name True
+getVar = findVar True
 
-findVar :: Id -> Bool -> State Context (Maybe (Int, Type))
-findVar name doPrev = do
-  (Context _ vars _ addr _) <- get
+findVar :: Bool -> Id -> State Context (Maybe (Int, Type))
+findVar doPrev name = do
+  Context _ vars _ addr _ <- get
   case findIndex (byId name) vars of
     Just idx -> return $ Just ((addr + idx) * regLen, fst $ vars !! idx)
-    Nothing | doPrev -> lookInPrev $ getVar name
+    Nothing | doPrev -> lookInPrev $ findVar doPrev name
     Nothing -> return Nothing
 
 defineFunc :: (Type, Id) -> State Context ()
@@ -64,7 +64,7 @@ declareFunc f = _addFunc f False
 
 _addFunc :: (Type, Id) -> Bool -> State Context () -- TODO error handling
 _addFunc (ty, name) doDefine = do
-  mfunc <- getFunc name
+  mfunc <- findFunc False name
   case mfunc of
     Just (ty', _, _) | ty /= ty' -> error $ "Conflicting types for " ++ Id.toStr name ++ " : " ++ Type.toStr ty ++ ", already declared as " ++ Type.toStr ty'
     Just (_, _, True) | doDefine -> error $ "Redefinition of " ++ Id.toStr name
@@ -80,9 +80,15 @@ _addFunc (ty, name) doDefine = do
       return ()
 
 getFunc :: Id -> State Context (Maybe Func)
-getFunc name = do
+getFunc = findFunc True
+
+findFunc :: Bool -> Id -> State Context (Maybe Func)
+findFunc doPrev name = do
   Context funcs _ _ _ _ <- get
-  return $ find (byIdFunc name) funcs
+  case find (byIdFunc name) funcs of
+    Just func -> return $ Just func
+    Nothing | doPrev -> lookInPrev $ findFunc doPrev name
+    Nothing -> return Nothing
 
 addLabel :: String -> State Context ()
 addLabel lbl = do

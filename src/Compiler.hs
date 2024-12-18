@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, declareFunc, defineFunc, newFunction, newScope)
+import Context (Context, declareFunc, defineFunc, getFunc, newFunction, newScope)
 import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -61,12 +61,12 @@ statement st = case Statement.def st of
 
 funcDec :: Type -> Id -> [(Type, Maybe Id)] -> State Context [Instruction]
 funcDec ret name params = do
-  Context.declareFunc (Type.Function ret (map fst params), name)
+  !_ <- Context.declareFunc (Type.Function ret (map fst params), name)
   return []
 
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
 funcDef ret name params body = do
-  Context.defineFunc (Type.Function ret (map fst params), name)
+  !_ <- Context.defineFunc (Type.Function ret (map fst params), name)
   context <- get
   put $ Context.newFunction context
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
@@ -162,7 +162,7 @@ expr e = case Expr.def e of
       (_, Just _) -> error "Can't assign to constant"
       (_, Nothing) -> binop (evalOrThrow e) left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
-  -- ED.Call ex args -> []
+  ED.Call ex args -> call ex args
   ED.Parenthese ex -> expr ex
   ED.Invalid str -> error $ "Invalid expression : " ++ str
   _ -> error $ "Expression not implemented yet : " ++ show e
@@ -187,6 +187,15 @@ binop _ left op right = do
         Op.Div -> DIV R0 (Reg R4)
         _ -> error $ "Operator not implemented : " ++ show op
   return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ [insOp]
+
+call :: Expr -> [Expr] -> State Context [Instruction]
+call ex args = case Expr.def ex of
+  ED.Id name -> do
+    mvar <- Context.getFunc name
+    case mvar of
+      Nothing -> error $ "Undefined identifier : " ++ show name
+      Just func -> error $ show func
+  _ -> error "Unimplemented"
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
