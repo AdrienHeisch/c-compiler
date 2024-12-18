@@ -25,11 +25,15 @@ data Context = Context
 new :: Context
 new = Context [] [] [] 0 Nothing
 
-newFunction :: Context -> Context
-newFunction prev = Context [] [] [] 0 (Just prev)
+newFunction :: State Context ()
+newFunction = do
+  prev <- get
+  put $ Context [] [] [] 0 (Just prev)
 
-newScope :: Context -> Context
-newScope prev@(Context _ vars l _ _) = Context [] [] l (length vars) (Just prev)
+newScope :: State Context ()
+newScope = do
+  prev@(Context _ vars l _ _) <- get
+  put $ Context [] [] l (length vars) (Just prev)
 
 addVars :: [(Type, Id)] -> State Context ()
 addVars vars = case vars of

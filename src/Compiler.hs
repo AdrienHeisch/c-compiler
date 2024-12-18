@@ -3,7 +3,7 @@ module Compiler (compile) where
 import Constant (Constant (Constant))
 import Context (Context, declareFunc, defineFunc, getFunc, getLocals, newFunction, newScope)
 import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
-import Control.Monad.State.Lazy (State, evalState, get, put, runState)
+import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
 import Expr (Expr)
@@ -67,10 +67,8 @@ funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Ins
 funcDef ret name params body = do
   !_ <- Context.defineFunc (Type.Function ret (map fst params), name)
   context <- get
-  let context' = Context.newFunction context
-  put context'
-  let (_, context'') = runState (collectLabels body) context'
-  put context''
+  Context.newFunction
+  collectLabels body
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
   Context.addVars namedParams
   ins <- statements body
@@ -90,7 +88,7 @@ var ty name mexpr = do
 block :: [Statement] -> State Context [Instruction]
 block sts = do
   context <- get
-  put $ Context.newScope context
+  Context.newScope
   ins <- statements sts
   put context
   return ins
