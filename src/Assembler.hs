@@ -15,11 +15,11 @@ secondPass ins = case ins of
 bytecode :: Instruction -> [Word8]
 bytecode instr = case instr of
   NOP -> make 0x00
-  HALT (Reg r) -> makeR 0x01 r
-  HALT (Cst c) -> makeC 0x01 c
-  SYS_CALL (Reg r) -> makeR 0x02 r
-  SYS_CALL (Cst c) -> makeC 0x02 c
-  CLEAR r -> makeR 0x03 r
+  HALT (Reg r) -> makeR_ 0x01 r
+  HALT (Cst c) -> make_C 0x01 c
+  SYCALL (Reg r) -> makeR_ 0x02 r
+  SYCALL (Cst c) -> make_C 0x02 c
+  CLEAR r -> makeR_ 0x03 r
   SET r (Reg r') -> makeRR 0x04 r r'
   SET r (Cst c) -> makeRC 0x04 r c
   LOAD r (Reg r') -> makeRR 0x05 r r'
@@ -29,9 +29,9 @@ bytecode instr = case instr of
   SWAP r r' -> makeRR 0x07 r r'
   CMP r (Reg r') -> makeRR 0x08 r r'
   CMP r (Cst c) -> makeRC 0x08 r c
-  NEG r -> makeR 0x07 r
-  INC r -> makeR 0x0A r
-  DEC r -> makeR 0x0B r
+  NEG r -> makeR_ 0x07 r
+  INC r -> makeR_ 0x0A r
+  DEC r -> makeR_ 0x0B r
   ADD r (Reg r') -> makeRR 0x0C r r'
   ADD r (Cst c) -> makeRC 0x0C r c
   SUB r (Reg r') -> makeRR 0x0D r r'
@@ -40,7 +40,7 @@ bytecode instr = case instr of
   MUL r (Cst c) -> makeRC 0x0E r c
   DIV r (Reg r') -> makeRR 0x0F r r'
   DIV r (Cst c) -> makeRC 0x0F r c
-  NOT r -> makeR 0x10 r
+  NOT r -> makeR_ 0x10 r
   AND r (Reg r') -> makeRR 0x11 r r'
   AND r (Cst c) -> makeRC 0x11 r c
   OR r (Reg r') -> makeRR 0x12 r r'
@@ -61,18 +61,18 @@ bytecode instr = case instr of
   RCL r (Cst c) -> makeRC 0x19 r c
   RCR r (Reg r') -> makeRR 0x1A r r'
   RCR r (Cst c) -> makeRC 0x1A r c
-  BSWAP r -> makeR 0x1B r
-  PUSH (Reg r) -> makeR 0x1C r
-  PUSH (Cst c) -> makeC 0x1C c
-  DUP (Reg r) -> makeR 0x1D r
-  DUP (Cst c) -> makeC 0x1D c
-  POP r -> makeR 0x1E r
+  BSWAP r -> makeR_ 0x1B r
+  PUSH (Reg r) -> makeR_ 0x1C r
+  PUSH (Cst c) -> make_C 0x1C c
+  DUP (Reg r) -> makeR_ 0x1D r
+  DUP (Cst c) -> make_C 0x1D c
+  POP r -> makeR_ 0x1E r
   DROP -> make 0x1F
-  CALL (Reg r) -> makeR 0x20 r
-  CALL (Cst c) -> makeC 0x20 c
+  CALL (Reg r) -> makeR_ 0x20 r
+  CALL (Cst c) -> make_C 0x20 c
   RET -> make 0x21
-  JMP (Reg r) -> makeR 0x22 r
-  JMP (Cst c) -> makeC 0x22 c
+  JMP (Reg r) -> make_R 0x22 r
+  JMP (Cst c) -> make_C 0x22 c
   JEQ r (Reg r') -> makeRR 0x23 r r'
   JEQ r (Cst c) -> makeRC 0x23 r c
   JNE r (Reg r') -> makeRR 0x24 r r'
@@ -85,18 +85,19 @@ bytecode instr = case instr of
   JLT r (Cst c) -> makeRC 0x27 r c
   JLE r (Reg r') -> makeRR 0x28 r r'
   JLE r (Cst c) -> makeRC 0x28 r c
-  PRINT (Reg r) -> makeR 0x29 r
-  PRINT (Cst c) -> makeC 0x29 c
-  EPRINT (Reg r) -> makeR 0x2A r
-  EPRINT (Cst c) -> makeC 0x2A c
+  PRINT (Reg r) -> makeR_ 0x29 r
+  PRINT (Cst c) -> make_C 0x29 c
+  EPRINT (Reg r) -> makeR_ 0x2A r
+  EPRINT (Cst c) -> make_C 0x2A c
   DUMP -> make 0x2B
   LABEL _ -> error "Label instructions should not appear at this point"
   _ -> error $ "Invalid operation : " ++ show instr
   where
     make op = asmRR op Nothing (0 :: Int)
-    makeR op r = asmRR op (Just r) (0 :: Int)
+    makeR_ op r = asmRR op (Just r) (0 :: Int)
+    make_R op r = asmRR op Nothing (regToInt r)
+    make_C op = asmRC op Nothing
     makeRR op r r' = asmRR op (Just r) (regToInt r')
-    makeC op = asmRC op Nothing
     makeRC op r = asmRC op (Just r)
 
 asmRR :: Word8 -> Maybe Register -> Int -> [Word8]
