@@ -105,8 +105,8 @@ asmRR op Nothing val = [regFlag op, 0, intoByte val]
 asmRR op (Just reg) val = [regFlag op, intoByte (regToInt reg), intoByte val]
 
 asmRC :: Word8 -> Maybe Register -> Int -> [Word8]
-asmRC op Nothing val = op : 0 : intoByteArray val 8
-asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoByteArray val regLen
+asmRC op Nothing val = op : 0 : intoBytes val
+asmRC op (Just reg) val = op : intoByte (regToInt reg) : intoBytes val
 
 regFlag :: Word8 -> Word8
 regFlag = (.|.) (0b10000000 :: Word8)
@@ -114,8 +114,8 @@ regFlag = (.|.) (0b10000000 :: Word8)
 intoByte :: (Integral a) => a -> Word8
 intoByte n = fromIntegral n :: Word8
 
-intoByteArray :: (Integral a1, Bits a1, Num a2) => a1 -> Int -> [a2]
-intoByteArray n len = [fromIntegral ((n `shiftR` (i * 8)) .&. 0xFF) | i <- [0 .. len - 1]]
+intoBytes :: (Integral a1, Bits a1, Num a2) => a1 -> [a2]
+intoBytes n = [fromIntegral ((n `shiftR` (i * 8)) .&. 0xFF) | i <- [0 .. regLen - 1]]
 
 regToInt :: Register -> Int
 regToInt = (.&. ((1 `shiftL` 64) - 1)) . fromEnum
