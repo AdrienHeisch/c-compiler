@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, newFunction)
+import Context (Context, newFunction, newScope)
 import Context qualified (new, addVar, addVars, makeLabel, getVar, makeAnonLabel, getLabel)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -34,7 +34,7 @@ statement :: Statement -> State Context [Instruction]
 statement st = case Statement.def st of
   SD.Empty -> return []
   SD.FuncDec ty name params body -> funcDef ty name params body
-  SD.Block block -> statements block
+  SD.Block sts -> block sts
   SD.Expr e -> expr e
   SD.Var (v :| vs) -> vars (v : vs)
   SD.If cond then_ else_ -> if_ cond then_ else_
@@ -61,8 +61,8 @@ funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Ins
 funcDef _ _ params body = do
   -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
   context <- get
-  let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
   put $ Context.newFunction context
+  let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
   Context.addVars namedParams
   ins <- statements body
   put context
@@ -77,6 +77,14 @@ var ty name mexpr = case mexpr of
     Context.addVar (ty, name)
     ins <- expr ex
     return $ ins ++ [PUSH (Reg R0)]
+
+block :: [Statement] -> State Context [Instruction]
+block sts = do
+  context <- get
+  put $ Context.newScope context
+  ins <- statements sts
+  put context
+  return ins
 
 if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
 if_ cond then_ else_ = do
