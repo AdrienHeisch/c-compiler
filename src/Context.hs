@@ -1,4 +1,4 @@
-module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc) where
+module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals) where
 
 import Control.Monad.State.Lazy (State, get, put)
 import Data.List (find, findIndex)
@@ -44,6 +44,11 @@ addVar (ty, name) = do
       Context f vars l a p <- get
       put $ Context f (vars ++ [(ty, name)]) l a p
     Just _ -> error $ "Redefinition of " ++ Id.toStr name
+
+getLocals :: State Context [(Int, Type)]
+getLocals = do
+  Context _ vars _ _ _ <- get
+  return (zipWith (curry (\(idx, (ty, _)) -> (idx, ty))) [0..] vars)
 
 getVar :: Id -> State Context (Maybe (Int, Type))
 getVar = findVar True

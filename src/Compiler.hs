@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, declareFunc, defineFunc, getFunc, newFunction, newScope)
+import Context (Context, declareFunc, defineFunc, getLocals, getFunc, newFunction, newScope)
 import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -47,7 +47,7 @@ statement st = case Statement.def st of
   -- SD.ForVar {fdecl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement} ->
   -- SD.Break ->
   -- SD.Continue ->
-  -- SD.Return (Maybe Expr) ->
+  SD.Return mexpr -> return_ mexpr
   -- SD.Case (Constant IntRepr) ->
   SD.Goto lblName -> goto lblName
   SD.Labeled lblName st' -> label lblName st'
@@ -80,7 +80,7 @@ var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = do
   !_ <- Context.addVar (ty, name)
   case mexpr of
-    Nothing -> return []
+    Nothing -> return [PUSH (Reg R0)]
     Just ex -> do
       ins <- expr ex
       return $ ins ++ [PUSH (Reg R0)]
@@ -189,13 +189,33 @@ binop _ left op right = do
   return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ [insOp]
 
 call :: Expr -> [Expr] -> State Context [Instruction]
-call ex args = case Expr.def ex of
+call ex _ = case Expr.def ex of
   ED.Id name -> do
     mvar <- Context.getFunc name
     case mvar of
       Nothing -> error $ "Undefined identifier : " ++ show name
-      Just func -> error $ show func
+      Just (_, _, _) -> do
+        let Id nameStr = name
+        return
+          [ PUSH (Reg BP),
+            SET R0 (Reg PC),
+            ADD R0 (Cst 4),
+            PUSH (Reg R0),
+            JMP (Lbl nameStr)
+          ]
   _ -> error "Unimplemented"
+
+return_ :: Maybe Expr -> State Context [Instruction]
+return_ mexpr = do
+  vars <- Context.getLocals
+  let frameSize = length vars
+      insFrame = replicate frameSize DROP
+  return $
+    insFrame
+      ++ [ POP R0,
+           POP BP,
+           JMP (Reg R0)
+         ]
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
