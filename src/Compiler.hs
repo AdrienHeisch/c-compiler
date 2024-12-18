@@ -1,22 +1,23 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, newFunction, newScope)
-import Context qualified (new, addVar, addVars, makeLabel, getVar, makeAnonLabel, getLabel)
+import Context (Context, declareFunc, defineFunc, newFunction, newScope)
+import Context qualified (addVar, addVars, getLabel, getVar, makeAnonLabel, makeLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe)
 import Expr (Expr (Expr))
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
-import Identifier (Id(..))
+import Identifier (Id (..))
 import Instruction (Instruction (..), Program (..), Register (..), Value (..))
 import Op (getBinaryAssignOp)
 import Op qualified
 import Statement (Statement)
 import Statement qualified
 import Statement qualified as SD (StatementDef (..))
-import Type (Type (Int))
+import Type (Type)
+import Type qualified (Type (..))
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
@@ -60,17 +61,20 @@ statement st = case Statement.def st of
 
 funcDec :: Type -> Id -> [(Type, Maybe Id)] -> State Context [Instruction]
 funcDec ret name params = do
+  Context.declareFunc (Type.Function ret (map fst params), name)
   return []
 
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
 funcDef ret name params body = do
+  Context.defineFunc (Type.Function ret (map fst params), name)
   context <- get
   put $ Context.newFunction context
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
   Context.addVars namedParams
   ins <- statements body
   put context
-  return $ [FUNCTION name, SET BP (Reg SP)] ++ ins
+  let Id nameStr = name
+  return $ [FUNCTION nameStr, SET BP (Reg SP)] ++ ins
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = case mexpr of
@@ -125,8 +129,8 @@ goto :: Id -> State Context [Instruction]
 goto (Id lblName) = do
   mlbl <- Context.getLabel lblName
   case mlbl of
-      Nothing -> error $ "Undefined label : " ++ show lblName
-      Just lbl -> return [JMP (Lbl lbl)]
+    Nothing -> error $ "Undefined label : " ++ show lblName
+    Just lbl -> return [JMP (Lbl lbl)]
 
 label :: Id -> Statement -> State Context [Instruction]
 label (Id lblName) st = do

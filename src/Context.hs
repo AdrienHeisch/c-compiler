@@ -1,16 +1,21 @@
-module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, makeLabel, getLabel, makeAnonLabel) where
+module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, makeLabel, getLabel, makeAnonLabel, defineFunc, declareFunc) where
 
 import Control.Monad.State.Lazy (State, get, put)
-import Data.List (elemIndex, findIndex)
+import Data.List (elemIndex, find, findIndex)
+import Debug.Trace (trace)
 import Identifier (Id)
+import Identifier qualified as Id (toStr)
 import Instruction (regLen)
 import Type (Type)
+import Type qualified (toStr)
+import Utils (modifyFirst)
 
 type Var = (Type, Id)
+
 type Func = (Type, Id, Bool)
 
 data Context = Context
-  { funcs :: [Maybe Func],
+  { funcs :: [Func],
     vars :: [Var],
     lbls :: [Maybe String],
     prev :: Maybe Context
@@ -33,15 +38,43 @@ addVars vars = case vars of
 
 addVar :: (Type, Id) -> State Context ()
 addVar (ty, name) = do
-  (Context f vars l p) <- get
+  Context f vars l p <- get
   put $ Context f (vars ++ [(ty, name)]) l p
 
-getVar :: Id -> State Context (Maybe (Int, Type))
+getVar :: Id -> State Context (Maybe (Int, Type)) -- TODO error if already declared
 getVar name = do
   Context _ vars _ _ <- get
   case findIndex (byId name) vars of
     Nothing -> return Nothing
-    Just idx -> Just (idx * regLen, fst $ vars !! idx)
+    Just idx -> return $ Just (idx * regLen, fst $ vars !! idx)
+
+defineFunc :: (Type, Id) -> State Context ()
+defineFunc f = _addFunc f True
+
+declareFunc :: (Type, Id) -> State Context ()
+declareFunc f = _addFunc f False
+
+_addFunc :: (Type, Id) -> Bool -> State Context () -- TODO error handling
+_addFunc (ty, name) doDefine = do
+  mfunc <- getFunc name
+  trace ("doDefine: " ++ show doDefine ++ "; mfunc: " ++ show mfunc) $ case mfunc of
+    Just (ty', _, _) | ty /= ty' -> error $ "Conflicting types for " ++ Id.toStr name ++ " : " ++ Type.toStr ty ++ ", already declared as " ++ Type.toStr ty'
+    Just (_, _, True) | doDefine -> error $ "Redefinition of " ++ Id.toStr name
+    Just (_, _, True) -> return ()
+    Just (_, _, False) | doDefine -> do
+      Context funcs v l p <- get
+      let funcs' = modifyFirst (byIdFunc name) (\(t, n, _) -> (t, n, True)) funcs
+      put $ Context funcs' v l p
+      return ()
+    _ -> do
+      Context funcs v l p <- get
+      put $ Context (funcs ++ [(ty, name, doDefine)]) v l p
+      return ()
+
+getFunc :: Id -> State Context (Maybe Func)
+getFunc name = do
+  Context funcs _ _ _ <- get
+  return $ find (byIdFunc name) funcs
 
 makeLabel :: String -> State Context Int
 makeLabel lbl = _addLabel $ Just lbl
@@ -49,7 +82,7 @@ makeLabel lbl = _addLabel $ Just lbl
 makeAnonLabel :: State Context Int
 makeAnonLabel = _addLabel Nothing
 
-_addLabel :: Maybe String -> State Context Int
+_addLabel :: Maybe String -> State Context Int -- TODO error if already defined
 _addLabel lbl = do
   Context f v lbls p <- get
   put $ Context f v (lbls ++ [lbl]) p
@@ -62,3 +95,6 @@ getLabel lbl = do
 
 byId :: Id -> Var -> Bool
 byId name = (== name) . (\var -> let (_, name') = var in name')
+
+byIdFunc :: Id -> Func -> Bool
+byIdFunc name = (== name) . (\var -> let (_, name', _) = var in name')
