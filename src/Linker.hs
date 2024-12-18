@@ -1,3 +1,6 @@
 module Linker (link) where
 
-link = ()
+import Instruction (Program)
+
+link :: [Program] -> Program
+link = head

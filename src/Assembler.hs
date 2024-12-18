@@ -17,7 +17,7 @@ firstPass :: [Instruction] -> AsmState ()
 firstPass ins = case ins of
   [] -> return ()
   (LABEL l : rest) -> do
-    newLabel l
+    newLabel 0 -- FIXME remove this
     firstPass rest
   (_ : rest) -> do
     modify $ pcAdd 1
@@ -92,32 +92,31 @@ bytecode instr = case instr of
   RET -> make 0x21
   JMP (Reg r) -> makeR 0x22 r
   JMP (Cst c) -> makeC 0x22 c
-  JMP (Lbl l) -> makeL 0x22 l
+  -- JMP (Lbl l) -> makeL 0x22 l
   JEQ r (Reg r') -> makeRR 0x23 r r'
   JEQ r (Cst c) -> makeRC 0x23 r c
-  JEQ r (Lbl l) -> makeRL 0x23 r l
+  -- JEQ r (Lbl l) -> makeRL 0x23 r l
   JNE r (Reg r') -> makeRR 0x24 r r'
   JNE r (Cst c) -> makeRC 0x24 r c
-  JNE r (Lbl l) -> makeRL 0x24 r l
+  -- JNE r (Lbl l) -> makeRL 0x24 r l
   JGT r (Reg r') -> makeRR 0x25 r r'
   JGT r (Cst c) -> makeRC 0x25 r c
-  JGT r (Lbl l) -> makeRL 0x25 r l
+  -- JGT r (Lbl l) -> makeRL 0x25 r l
   JGE r (Reg r') -> makeRR 0x26 r r'
   JGE r (Cst c) -> makeRC 0x26 r c
-  JGE r (Lbl l) -> makeRL 0x26 r l
+  -- JGE r (Lbl l) -> makeRL 0x26 r l
   JLT r (Reg r') -> makeRR 0x27 r r'
   JLT r (Cst c) -> makeRC 0x27 r c
-  JLT r (Lbl l) -> makeRL 0x27 r l
+  -- JLT r (Lbl l) -> makeRL 0x27 r l
   JLE r (Reg r') -> makeRR 0x28 r r'
   JLE r (Cst c) -> makeRC 0x28 r c
-  JLE r (Lbl l) -> makeRL 0x4D r l
+  -- JLE r (Lbl l) -> makeRL 0x4D r l
   PRINT (Reg r) -> makeR 0x29 r
   PRINT (Cst c) -> makeC 0x29 c
   EPRINT (Reg r) -> makeR 0x2A r
   EPRINT (Cst c) -> makeC 0x2A c
   DUMP -> make 0x2B
   LABEL _ -> return []
-  FUNCTION _ -> return []
   _ -> error $ "Invalid operation : " ++ show instr
   where
     make op = return $ asmRR op Nothing (0 :: Int)

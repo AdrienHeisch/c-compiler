@@ -2,7 +2,7 @@ module Compiler (compile) where
 
 import Constant (Constant (Constant))
 import Context (Context, declareFunc, defineFunc, newFunction, newScope)
-import Context qualified (addVar, addVars, getLabel, getVar, makeAnonLabel, makeLabel, new)
+import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe)
@@ -74,7 +74,7 @@ funcDef ret name params body = do
   ins <- statements body
   put context
   let Id nameStr = name
-  return $ [FUNCTION nameStr, SET BP (Reg SP)] ++ ins
+  return $ [LABEL nameStr, SET BP (Reg SP)] ++ ins
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = case mexpr of
@@ -126,15 +126,15 @@ dowhile cond body = do
   return $ LABEL lblPre : insBody ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
 
 goto :: Id -> State Context [Instruction]
-goto (Id lblName) = do
-  mlbl <- Context.getLabel lblName
-  case mlbl of
-    Nothing -> error $ "Undefined label : " ++ show lblName
-    Just lbl -> return [JMP (Lbl lbl)]
+goto (Id lbl) = do
+  hasLabel <- Context.hasLabel lbl
+  if hasLabel
+    then return [JMP (Lbl lbl)]
+    else error $ "Undefined label : " ++ show lbl
 
 label :: Id -> Statement -> State Context [Instruction]
-label (Id lblName) st = do
-  lbl <- Context.makeLabel lblName
+label (Id lbl) st = do
+  Context.addLabel lbl
   ins <- statement st
   return $ LABEL lbl : ins
 

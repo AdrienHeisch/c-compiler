@@ -1,7 +1,7 @@
-module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, makeLabel, getLabel, makeAnonLabel, defineFunc, declareFunc) where
+module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc) where
 
 import Control.Monad.State.Lazy (State, get, put)
-import Data.List (elemIndex, find, findIndex)
+import Data.List (find, findIndex)
 import Debug.Trace (trace)
 import Identifier (Id)
 import Identifier qualified as Id (toStr)
@@ -17,7 +17,7 @@ type Func = (Type, Id, Bool)
 data Context = Context
   { funcs :: [Func],
     vars :: [Var],
-    lbls :: [Maybe String],
+    lbls :: [String],
     prev :: Maybe Context
   }
   deriving (Show)
@@ -76,22 +76,27 @@ getFunc name = do
   Context funcs _ _ _ <- get
   return $ find (byIdFunc name) funcs
 
-makeLabel :: String -> State Context Int
-makeLabel lbl = _addLabel $ Just lbl
+addLabel :: String -> State Context ()
+addLabel lbl = do
+  _ <- _addLabel $ Just lbl
+  return ()
 
-makeAnonLabel :: State Context Int
+makeAnonLabel :: State Context String
 makeAnonLabel = _addLabel Nothing
 
-_addLabel :: Maybe String -> State Context Int -- TODO error if already defined
-_addLabel lbl = do
+_addLabel :: Maybe String -> State Context String -- TODO error if already defined
+_addLabel mlbl = do
   Context f v lbls p <- get
+  let lbl = case mlbl of
+        Just lbl' -> lbl'
+        Nothing -> ".L" ++ show (length lbls)
   put $ Context f v (lbls ++ [lbl]) p
-  return $ length lbls
+  return lbl
 
-getLabel :: String -> State Context (Maybe Int)
-getLabel lbl = do
+hasLabel :: String -> State Context Bool
+hasLabel lbl = do
   Context _ _ lbls _ <- get
-  return $ elemIndex (Just lbl) lbls
+  return $ lbl `elem` lbls
 
 byId :: Id -> Var -> Bool
 byId name = (== name) . (\var -> let (_, name') = var in name')
