@@ -1,9 +1,9 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, addVar, addVars, anonLabel, getVar, addLabel, getLabel)
-import Context qualified (new)
-import Control.Monad.State.Lazy (State, evalState, get, modify, put)
+import Context (Context)
+import Context qualified (new, addVar, addVars, makeLabel, getVar, makeAnonLabel, getLabel)
+import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe)
 import Expr (Expr (Expr))
@@ -40,8 +40,8 @@ funcDef _ _ params body = do
   -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
   context <- get
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
-      newContext = addVars namedParams $ Context.new (Just context)
-  put newContext
+  put $ Context.new (Just context)
+  Context.addVars namedParams
   ins <- statements body
   put context
   return $ [{- LABEL lbl,  -}NOP, SET BP (Reg SP)] ++ ins
@@ -83,17 +83,17 @@ statement st = case Statement.def st of
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = case mexpr of
   Nothing -> do
-    modify $ addVar (ty, name)
+    Context.addVar (ty, name)
     return []
   Just ex -> do
-    modify $ addVar (ty, name)
+    Context.addVar (ty, name)
     ins <- expr ex
     return $ ins ++ [PUSH (Reg R0)]
 
 if_ :: Expr -> Statement -> Maybe Statement -> State Context [Instruction]
 if_ cond then_ else_ = do
-  lblElse <- anonLabel
-  lblPost <- anonLabel
+  lblElse <- Context.makeAnonLabel
+  lblPost <- Context.makeAnonLabel
   insCond <- expr cond
   insThen <- statement then_
   insElse <- maybe (return Nothing) (fmap Just . statement) else_
@@ -107,31 +107,30 @@ if_ cond then_ else_ = do
 
 while :: Expr -> Statement -> State Context [Instruction]
 while cond body = do
-  lblPre <- anonLabel
-  lblPost <- anonLabel
+  lblPre <- Context.makeAnonLabel
+  lblPost <- Context.makeAnonLabel
   insCond <- expr cond
   insBody <- statements [body]
   return $ LABEL lblPre : insCond ++ [JEQ R0 (Lbl lblPost)] ++ insBody ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
 
 dowhile :: Expr -> Statement -> State Context [Instruction]
 dowhile cond body = do
-  lblPre <- anonLabel
-  lblPost <- anonLabel
+  lblPre <- Context.makeAnonLabel
+  lblPost <- Context.makeAnonLabel
   insCond <- expr cond
   insBody <- statements [body]
   return $ LABEL lblPre : insBody ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
 
 goto :: Id -> State Context [Instruction]
 goto (Id lblName) = do
-  context <- get
-  let mlbl = getLabel context lblName
+  mlbl <- Context.getLabel lblName
   case mlbl of
       Nothing -> error $ "Undefined label : " ++ show lblName
       Just lbl -> return [JMP (Lbl lbl)]
 
 label :: Id -> Statement -> State Context [Instruction]
 label (Id lblName) st = do
-  lbl <- addLabel lblName
+  lbl <- Context.makeLabel lblName
   ins <- statement st
   return $ LABEL lbl : ins
 
@@ -139,7 +138,7 @@ expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
   ED.Id name -> do
     context <- get
-    case getVar context name of
+    case Context.getVar context name of
       Nothing -> error $ "Undefined identifier : " ++ show name
       Just (idx, _) ->
         return [SET R0 (Reg BP), ADD R0 (Cst idx), LOAD R0 (Reg R0)]
@@ -168,7 +167,7 @@ expr e = case Expr.def e of
 assign :: Id -> Expr -> State Context [Instruction]
 assign name ex = do
   context <- get
-  case getVar context name of
+  case Context.getVar context name of
     Nothing -> error $ "Undefined identifier : " ++ show name
     Just (idx, _) -> do
       insEx <- expr ex
