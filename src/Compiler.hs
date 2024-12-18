@@ -195,7 +195,7 @@ call ex _ = case Expr.def ex of
     case mvar of
       Nothing -> error $ "Undefined identifier : " ++ show name
       Just (_, Id nameStr, _) -> do
-        return [CALL (Lbl nameStr)]
+        return [CALL (Lbl nameStr), SET R0 (Reg RR)]
   _ -> error "Unimplemented"
 
 return_ :: Maybe Expr -> State Context [Instruction]
@@ -203,7 +203,11 @@ return_ mexpr = do
   vars <- Context.getLocals
   let frameSize = length vars
       insFrame = replicate frameSize DROP
-  return $ insFrame ++ [RET (Cst 0)]
+  case mexpr of
+    Nothing -> return $ insFrame ++ [RET (Cst 0)]
+    Just ex -> do
+      insEx <- expr ex
+      return $ insEx ++ insFrame ++ [RET (Reg R0)]
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
