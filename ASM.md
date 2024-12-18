@@ -25,7 +25,7 @@ With N being a register, a constant or eventually a label
 
 0x00	NOP _ _				No op
 0x01	HALT N	_			Stop execution with an exit value N
-0x02	SYS_CALL N _		Invoke system call with id N taking parameters from the stack
+0x02	SYCALL N _			Invoke system call with id N taking parameters from the stack
 0x03	CLEAR RX _			Load the 0 constant into RX
 0x04	SET RX N			Load N into RX
 0x05	LOAD RX N			Load the value at address N into RX

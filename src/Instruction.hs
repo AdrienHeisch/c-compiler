@@ -20,7 +20,7 @@ data Instruction
   = LABEL String -- TODO put this in a separate symbol type ?
   | NOP
   | HALT Value
-  | SYS_CALL Value
+  | SYCALL Value
   | CLEAR Register
   | SET Register Value
   | LOAD Register Value
@@ -79,9 +79,9 @@ data Register
   | RR
   | SR
   | FR
-  | PR
   | R0
   | R1
+  | R2
   | R3
   | R4
   | R5
