@@ -77,11 +77,11 @@ executable compiler
         Utils,
         Preprocessor,
         Delimiter,
-        Validator,
         Compiler,
         Instruction,
         Context,
-        Assembler
+        Assembler,
+        Linker
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

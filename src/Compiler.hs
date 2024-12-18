@@ -6,7 +6,7 @@ import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonL
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe)
-import Expr (Expr (Expr))
+import Expr (Expr)
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
 import Identifier (Id (..))
@@ -80,7 +80,7 @@ var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = do
   !_ <- Context.addVar (ty, name)
   case mexpr of
-    Nothing -> return [PUSH (Reg R0)]
+    Nothing -> return [PUSH (Cst 0)]
     Just ex -> do
       ins <- expr ex
       return $ ins ++ [PUSH (Reg R0)]
@@ -140,41 +140,43 @@ label (Id lbl) st = do
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
   ED.Id name -> do
-    mvar <- Context.getVar name
-    case mvar of
-      Nothing -> error $ "Undefined identifier : " ++ show name
-      Just (idx, _) ->
-        return [SET R0 (Reg BP), ADD R0 (Cst idx), LOAD R0 (Reg R0)]
+    insVar <- getVarAddr name
+    return $ insVar ++ [LOAD R0 (Reg R1)]
   ED.IntLiteral (Constant Type.Int int) -> do
     return [SET R0 (Cst int)]
   -- ED.FltLiteral flt -> []
   -- ED.StrLiteral str -> []
   -- ED.ArrayDecl exs -> []
-  -- ED.UnopPre op ex -> []
+  ED.UnopPre op ex -> unop op ex
   -- ED.UnopPost op ex -> []
-  ED.Binop (Expr (ED.Id name) _) Op.Assign right -> assign name right
-  ED.Binop left op right ->
-    case (left, getBinaryAssignOp op) of
-      (Expr (ED.Id name) _, Just innerOp) -> do
+  ED.Binop left Op.Assign right -> assign left right
+  ED.Binop left op right -> case getBinaryAssignOp op of
+      Just innerOp -> do
         insBinop <- binop (evalOrThrow e) left innerOp right
-        insAssign <- assign name right
+        insAssign <- assign left right
         return $ insBinop ++ insAssign
-      (_, Just _) -> error "Can't assign to constant"
-      (_, Nothing) -> binop (evalOrThrow e) left op right
+      Nothing -> binop (evalOrThrow e) left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
   ED.Call ex args -> call ex args
   ED.Parenthese ex -> expr ex
   ED.Invalid str -> error $ "Invalid expression : " ++ str
   _ -> error $ "Expression not implemented yet : " ++ show e
 
-assign :: Id -> Expr -> State Context [Instruction]
-assign name ex = do
-  mvar <- Context.getVar name
-  case mvar of
-    Nothing -> error $ "Undefined identifier : " ++ show name
-    Just (idx, _) -> do
-      insEx <- expr ex
-      return $ insEx ++ [SET R1 (Reg BP), ADD R1 (Cst idx), STORE R1 (Reg R0)]
+unop :: Op.Op -> Expr -> State Context [Instruction]
+unop op ex = case op of
+  Op.MultOrIndir -> do
+    insEx <- expr ex
+    return $ insEx ++ [LOAD R0 (Reg R0)]
+  Op.BitAndOrAddr -> do
+      insAddr <- exprAddress ex
+      return $ insAddr ++ [SET R0 (Reg R1)]
+  _ -> error $ "Operator not implemented : " ++ show op
+
+assign :: Expr -> Expr -> State Context [Instruction]
+assign left right = do
+  insAddr <- exprAddress left
+  insVal <- expr right
+  return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ [STORE R5 (Reg R0)]
 
 binop :: Type -> Expr -> Op.Op -> Expr -> State Context [Instruction]
 binop _ left op right = do
@@ -208,6 +210,22 @@ return_ mexpr = do
     Just ex -> do
       insEx <- expr ex
       return $ insEx ++ insFrame ++ [RET (Reg R0)]
+
+exprAddress :: Expr -> State Context [Instruction]
+exprAddress e = case Expr.def e of
+  ED.Id name -> getVarAddr name
+  ED.UnopPre Op.MultOrIndir e' -> do
+      insEx <- expr e'
+      return $ insEx ++ [SET R1 (Reg R0)]
+  _ -> error $ "Can't get address of : " ++ show e
+  
+getVarAddr :: Id -> State Context [Instruction]
+getVarAddr name = do
+  mvar <- Context.getVar name
+  case mvar of
+    Nothing -> error $ "Undefined identifier : " ++ show name
+    Just (idx, _) ->
+      return [SET R1 (Reg BP), ADD R1 (Cst idx)]
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
