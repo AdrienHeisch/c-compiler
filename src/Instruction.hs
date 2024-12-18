@@ -51,7 +51,7 @@ data Instruction
   | POP Register
   | DROP
   | CALL Value
-  | RET
+  | RET Value
   | JMP Value
   | JEQ Register Value
   | JNE Register Value

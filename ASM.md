@@ -24,8 +24,8 @@ FR				Used to store a status flag
 With N being a register, a constant or eventually a label
 
 0x00	NOP _ _				No op
-0x01	HALT N	_			Stop execution with an exit value N
-0x02	SYCALL N _			Invoke system call with id N taking parameters from the stack
+0x01	HALT _ N			Stop execution with an exit value N
+0x02	SYCALL _ N			Invoke system call with id N taking parameters from the stack
 0x03	CLEAR RX _			Load the 0 constant into RX
 0x04	SET RX N			Load N into RX
 0x05	LOAD RX N			Load the value at address N into RX
@@ -50,12 +50,12 @@ With N being a register, a constant or eventually a label
 0x18	SHR RX N			Shift the bits in register RX right by N positions
 0x19	RCL RX N			Rotate the bits in RX left by N positions with carN
 0x1A	RCR RX N			Rotate the bits in RX right by N positions with carN
-0x1B	BSWAP RX			Swap the byte order of the value in RX
-0x1C	PUSH N _			Push N onto the stack
-0x1D	DUP N _				Duplicate the value at address N and push it onto the stack
+0x1B	BSWAP RX _			Swap the byte order of the value in RX
+0x1C	PUSH _ N			Push N onto the stack
+0x1D	DUP _ N				Duplicate the value at address N and push it onto the stack
 0x1E	POP RX _			Pop the top value from the stack into RX
 0x1F	DROP _ _			Pop the top value from the stack and discard it
-0x20	CALL N _			Call a subroutine at address N
+0x20	CALL _ N			Call a subroutine at address N
 0x21	RET _ _				Return the value from the subroutine
 0x22	JMP _ N				Jump to instruction N
 0x23	JEQ RX N			Jump if RX is equal to zero

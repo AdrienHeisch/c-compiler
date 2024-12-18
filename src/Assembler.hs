@@ -15,9 +15,9 @@ secondPass ins = case ins of
 bytecode :: Instruction -> [Word8]
 bytecode instr = case instr of
   NOP -> make 0x00
-  HALT (Reg r) -> makeR_ 0x01 r
+  HALT (Reg r) -> make_R 0x01 r
   HALT (Cst c) -> make_C 0x01 c
-  SYCALL (Reg r) -> makeR_ 0x02 r
+  SYCALL (Reg r) -> make_R 0x02 r
   SYCALL (Cst c) -> make_C 0x02 c
   CLEAR r -> makeR_ 0x03 r
   SET r (Reg r') -> makeRR 0x04 r r'
@@ -62,15 +62,16 @@ bytecode instr = case instr of
   RCR r (Reg r') -> makeRR 0x1A r r'
   RCR r (Cst c) -> makeRC 0x1A r c
   BSWAP r -> makeR_ 0x1B r
-  PUSH (Reg r) -> makeR_ 0x1C r
+  PUSH (Reg r) -> make_R 0x1C r
   PUSH (Cst c) -> make_C 0x1C c
-  DUP (Reg r) -> makeR_ 0x1D r
+  DUP (Reg r) -> make_R 0x1D r
   DUP (Cst c) -> make_C 0x1D c
   POP r -> makeR_ 0x1E r
   DROP -> make 0x1F
-  CALL (Reg r) -> makeR_ 0x20 r
+  CALL (Reg r) -> make_R 0x20 r
   CALL (Cst c) -> make_C 0x20 c
-  RET -> make 0x21
+  RET (Reg r) -> make_R 0x21 r
+  RET (Cst c) -> make_C 0x21 c
   JMP (Reg r) -> make_R 0x22 r
   JMP (Cst c) -> make_C 0x22 c
   JEQ r (Reg r') -> makeRR 0x23 r r'

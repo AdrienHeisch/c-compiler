@@ -41,6 +41,7 @@ secondPass ins = case ins of
 
 replaceLabels :: Instruction -> AsmState Instruction
 replaceLabels instr = case instr of
+  CALL (Lbl lbl) -> do cst <- replace lbl; return $ CALL cst
   JMP (Lbl lbl) -> do cst <- replace lbl; return $ JMP cst
   JEQ r (Lbl lbl) ->  do cst <- replace lbl; return $ JEQ r cst
   JNE r (Lbl lbl) ->  do cst <- replace lbl; return $ JNE r cst

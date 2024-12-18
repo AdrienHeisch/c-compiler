@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context, declareFunc, defineFunc, getLocals, getFunc, newFunction, newScope)
+import Context (Context, declareFunc, defineFunc, getFunc, getLocals, newFunction, newScope)
 import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -194,15 +194,8 @@ call ex _ = case Expr.def ex of
     mvar <- Context.getFunc name
     case mvar of
       Nothing -> error $ "Undefined identifier : " ++ show name
-      Just (_, _, _) -> do
-        let Id nameStr = name
-        return
-          [ PUSH (Reg BP),
-            SET R0 (Reg PC),
-            ADD R0 (Cst 4),
-            PUSH (Reg R0),
-            JMP (Lbl nameStr)
-          ]
+      Just (_, Id nameStr, _) -> do
+        return [CALL (Lbl nameStr)]
   _ -> error "Unimplemented"
 
 return_ :: Maybe Expr -> State Context [Instruction]
@@ -210,12 +203,7 @@ return_ mexpr = do
   vars <- Context.getLocals
   let frameSize = length vars
       insFrame = replicate frameSize DROP
-  return $
-    insFrame
-      ++ [ POP R0,
-           POP BP,
-           JMP (Reg R0)
-         ]
+  return $ insFrame ++ [RET (Cst 0)]
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
