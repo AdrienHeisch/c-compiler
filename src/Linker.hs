@@ -1,15 +1,15 @@
 module Linker (link) where
 
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
-import Instruction (Instruction (..), Program (..), Value (..))
+import Instruction (Instruction (..), Program (..), Value (..), Register (RR))
 import Data.List (find)
 
 type AsmState = State (Int, [(String, Int)])
 
 link :: Program -> Program
 link (Program ins) = 
-  let main = JMP (Lbl "main")
-   in Program $ evalState (firstPass (main : ins) >>= secondPass) (0, [])
+  let main = [CALL (Lbl "main"), HALT (Reg RR)]
+   in Program $ evalState (firstPass (main ++ ins) >>= secondPass) (0, [])
 
 pcAdd :: (Num a) => a -> (a, b) -> (a, b)
 pcAdd n st = let (pc, lbls) = st in (pc + n, lbls)
