@@ -34,8 +34,7 @@ data StatementDef
   | Switch {eval :: Expr, body :: Statement}
   | While {cond :: Expr, body :: Statement}
   | DoWhile {body :: Statement, cond :: Expr}
-  | For {finit :: Maybe Expr, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
-  | ForVar {fdecl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
+  | For {finit :: Either Statement (Maybe Expr), fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement}
   | Break
   | Continue
   | Return (Maybe Expr)
@@ -71,8 +70,7 @@ instance Display StatementDef where
     Switch e st -> unwords ["Switch (", display e, display st, ")"]
     While e st -> unwords ["While (", display e, display st, ")"]
     DoWhile st e -> unwords ["DoWhile (", display st, display e, ")"]
-    For e0 e1 e2 st -> unwords ["ForVar (", display e0, display e1, display e1, display e2, display st, ")"]
-    ForVar st0 e0 e1 st1 -> unwords ["ForVar (", display st0, display e0, display e1, display e1, display st1, ")"]
+    For e0 e1 e2 st -> unwords ["ForVar (", concat $ case e0 of Left st' -> errs [st']; Right (Just e') -> Expr.errs [e']; Right Nothing -> [], display e1, display e1, display e2, display st, ")"]
     Return e -> "Return (" ++ display e ++ " )"
     Block block -> "Block (" ++ display block ++ " )"
     Labeled name st -> "Label " ++ Id.toStr name ++ " " ++ display st ++ " )"
@@ -96,8 +94,7 @@ errs = concatMap err
       Switch e st -> Expr.errs [e] ++ errs [st]
       While e st -> Expr.errs [e] ++ errs [st]
       DoWhile st e -> Expr.errs [e] ++ errs [st]
-      For e0 e1 e2 st -> Expr.errs (catMaybes [e0, e1, e2]) ++ errs [st]
-      ForVar st0 e0 e1 st1 -> Expr.errs (catMaybes [e0, e1]) ++ errs [st0, st1]
+      For e0 e1 e2 st -> (case e0 of Left st' -> errs [st']; Right (Just e') -> Expr.errs [e']; Right Nothing -> []) ++ Expr.errs (catMaybes [e1, e2]) ++ errs [st]
       Return e -> Expr.errs (catMaybes [e])
       Block block -> concatMap err block
       Invalid str -> [str ++ " at " ++ show (Token.foldCrs $ tks statement)]

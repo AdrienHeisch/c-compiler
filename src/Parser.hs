@@ -354,8 +354,8 @@ for taken = do
       modify $ drop 2
       declSt <- varStatement ty name (take 2 decl)
       return
-        ( SD.ForVar
-            declSt
+        ( SD.For
+            (Left declSt)
             (expr <$> listToMaybeList cond)
             (expr <$> listToMaybeList incr)
             body
@@ -363,7 +363,7 @@ for taken = do
     _ ->
       return
         ( SD.For
-            (expr <$> listToMaybeList decl)
+            (Right $ expr <$> listToMaybeList decl)
             (expr <$> listToMaybeList cond)
             (expr <$> listToMaybeList incr)
             body

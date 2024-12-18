@@ -5,7 +5,7 @@ import Context (Context, declareFunc, defineFunc, getFunc, getLocals, newFunctio
 import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, maybeToList)
 import Expr (Expr)
 import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
@@ -43,8 +43,7 @@ statement st = case Statement.def st of
   -- SD.Switch {eval :: Expr, body :: Statement} ->
   SD.While cond body -> while cond body
   SD.DoWhile body cond -> dowhile cond body
-  -- SD.For {finit :: Maybe Expr, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement} ->
-  -- SD.ForVar {fdecl :: Statement, fcond :: Maybe Expr, fincr :: Maybe Expr, fbody :: Statement} ->
+  SD.For finit fcond fincr fbody -> for finit fcond fincr fbody
   -- SD.Break ->
   -- SD.Continue ->
   SD.Return mexpr -> return_ mexpr
@@ -123,6 +122,20 @@ dowhile cond body = do
   insCond <- expr cond
   insBody <- statements [body]
   return $ LABEL lblPre : insBody ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ [JMP (Lbl lblPre)] ++ [LABEL lblPost]
+
+for :: Either Statement (Maybe Expr) -> Maybe Expr -> Maybe Expr -> Statement -> State Context [Instruction]
+for finit fcond fincr fbody = do
+  lblPre <- Context.makeAnonLabel
+  lblPost <- Context.makeAnonLabel
+  insInit <- case finit of
+    Left st -> statement st
+    Right (Just e) -> expr e
+    Right Nothing -> return []
+  insCond <- concat <$> sequence (maybeToList $ expr <$> fcond)
+  insIncr <- concat <$> sequence (maybeToList $ expr <$> fincr)
+  insBody <- statement fbody
+  return $ insInit ++ [LABEL lblPre] ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ insBody ++ insIncr ++ [JMP (Lbl lblPre), LABEL lblPost]
+
 
 goto :: Id -> State Context [Instruction]
 goto (Id lbl) = do
@@ -218,7 +231,7 @@ exprAddress e = case Expr.def e of
       insEx <- expr e'
       return $ insEx ++ [SET R1 (Reg R0)]
   _ -> error $ "Can't get address of : " ++ show e
-  
+
 getVarAddr :: Id -> State Context [Instruction]
 getVarAddr name = do
   mvar <- Context.getVar name
