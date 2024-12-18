@@ -7,22 +7,24 @@ import Instruction (regLen)
 import Type (Type)
 
 type Var = (Type, Id)
+type Func = (Type, Id, Bool)
 
 data Context = Context
-  { vars :: [Var],
+  { funcs :: [Maybe Func],
+    vars :: [Var],
     lbls :: [Maybe String],
     prev :: Maybe Context
   }
   deriving (Show)
 
 new :: Context
-new = Context [] [] Nothing
+new = Context [] [] [] Nothing
 
 newFunction :: Context -> Context
-newFunction prev@(Context vars _ _) = Context vars [] (Just prev)
+newFunction prev@(Context f v _ _) = Context f v [] (Just prev)
 
 newScope :: Context -> Context
-newScope prev@(Context vars lbls _) = Context vars lbls (Just prev)
+newScope prev@(Context f v l _) = Context f v l (Just prev)
 
 addVars :: [(Type, Id)] -> State Context ()
 addVars vars = case vars of
@@ -31,11 +33,11 @@ addVars vars = case vars of
 
 addVar :: (Type, Id) -> State Context ()
 addVar (ty, name) = do
-  (Context vars lbls prev) <- get
-  put $ Context (vars ++ [(ty, name)]) lbls prev
+  (Context f vars l p) <- get
+  put $ Context f (vars ++ [(ty, name)]) l p
 
 getVar :: Context -> Id -> Maybe (Int, Type)
-getVar (Context vars _ _) name = case findIndex (byId name) vars of
+getVar (Context _ vars _ _) name = case findIndex (byId name) vars of
   Nothing -> Nothing
   Just idx -> Just (idx * regLen, fst $ vars !! idx)
 
@@ -47,13 +49,13 @@ makeAnonLabel = _addLabel Nothing
 
 _addLabel :: Maybe String -> State Context Int
 _addLabel lbl = do
-  Context v lbls p <- get
-  put $ Context v (lbls ++ [lbl]) p
+  Context f v lbls p <- get
+  put $ Context f v (lbls ++ [lbl]) p
   return $ length lbls
 
 getLabel :: String -> State Context (Maybe Int)
 getLabel lbl = do
-  Context _ lbls _ <- get
+  Context _ _ lbls _ <- get
   return $ elemIndex (Just lbl) lbls
 
 byId :: Id -> Var -> Bool

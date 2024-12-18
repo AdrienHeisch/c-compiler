@@ -20,7 +20,7 @@ import Type (Type (Int))
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
-compile decls = Program $ {- JMP (Lbl 0) :  -}evalState (statements decls) Context.new
+compile decls = Program $ evalState (statements decls) Context.new
 
 statements :: [Statement] -> State Context [Instruction]
 statements sts = case sts of
@@ -58,15 +58,14 @@ statement st = case Statement.def st of
       return . concat $ ins
 
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
-funcDef _ _ params body = do
-  -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
+funcDef _ (Id name) params body = do
   context <- get
   put $ Context.newFunction context
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
   Context.addVars namedParams
   ins <- statements body
   put context
-  return $ [{- LABEL lbl,  -}NOP, SET BP (Reg SP)] ++ ins
+  return $ [FUNCTION name, SET BP (Reg SP)] ++ ins
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = case mexpr of

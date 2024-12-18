@@ -13,11 +13,13 @@ instance Utils.Display Program where
     where
       go (pc :: Int) ins' = case ins' of
         [] -> ""
-        LABEL l : rest -> show l ++ ":\n" ++ go pc rest
+        LABEL l : rest -> ".L" ++ show l ++ ":\n" ++ go pc rest
+        FUNCTION f : rest -> show f ++ ":\n" ++ go pc rest
         instr : rest -> "  " ++ printf "%04d" pc ++ "  " ++ show instr ++ "\n" ++ go (pc + 1) rest
 
 data Instruction
   = LABEL Int
+  | FUNCTION String
   | NOP
   | HALT Value
   | SYS_CALL Value
@@ -70,6 +72,7 @@ data Value
   = Reg Register
   | Cst Cst
   | Lbl Int
+  | Func String
   deriving (Show)
 
 data Register

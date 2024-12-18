@@ -117,6 +117,7 @@ bytecode instr = case instr of
   EPRINT (Cst c) -> makeC 0x2A c
   DUMP -> make 0x2B
   LABEL _ -> return []
+  FUNCTION _ -> return []
   _ -> error $ "Invalid operation : " ++ show instr
   where
     make op = return $ asmRR op Nothing (0 :: Int)
