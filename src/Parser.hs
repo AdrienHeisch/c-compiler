@@ -557,24 +557,24 @@ func ty name taken = do
     TD.Semicolon : _ -> do
       modify $ drop 1
       case parametersResult of
-        Left params -> return $ Statement (funcDef ty name params) (taken ++ paramTks)
+        Left params -> return $ Statement (funcDec ty name params) (taken ++ paramTks)
         Right err -> return $ Statement (SD.Invalid err) (taken ++ paramTks)
     TD.DelimOpen Dl.Br : _ -> do
       modify $ drop 1
       body <- collectFuncBody
       case parametersResult of
-        Left params -> return $ Statement (funcDec ty name params body) (taken ++ paramTks ++ body)
+        Left params -> return $ Statement (funcDef ty name params body) (taken ++ paramTks ++ body)
         Right err -> return $ Statement (SD.Invalid err) (taken ++ paramTks ++ body)
     _ -> return $ Statement (SD.Invalid "Expected ; or {") (taken ++ paramTks)
 
-funcDef :: Type -> Id -> [(Type, Maybe Id)] -> StatementDef
-funcDef = SD.FuncDef
+funcDec :: Type -> Id -> [(Type, Maybe Id)] -> StatementDef
+funcDec = SD.FuncDec
 
 collectFuncBody :: State [Token] [Token]
 collectFuncBody = collectUntilDelimiter Dl.Br
 
-funcDec :: Type -> Id -> [(Type, Maybe Id)] -> [Token] -> StatementDef
-funcDec ty name params body = SD.FuncDec ty name params $ evalState statementList body
+funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Token] -> StatementDef
+funcDef ty name params body = SD.FuncDef ty name params $ evalState statementList body
 
 collectStructFields :: State [Token] [Token]
 collectStructFields = collectUntilDelimiter Dl.Br

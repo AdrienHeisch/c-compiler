@@ -21,8 +21,8 @@ instance Display Statement where
 
 data StatementDef
   = Empty
-  | FuncDef Type Id [(Type, Maybe Id)]
-  | FuncDec Type Id [(Type, Maybe Id)] [Statement] -- TODO use maybe to separate declaration and definition
+  | FuncDec Type Id [(Type, Maybe Id)]
+  | FuncDef Type Id [(Type, Maybe Id)] [Statement] -- TODO use maybe to separate declaration and definition
   | Struct (Maybe Id) [(Type, Id)] -- TODO use maybe to separate declaration and definition
   | Union (Maybe Id) [(Type, Id)] -- TODO use maybe to separate declaration and definition
   | Enum (Maybe Id) Type (Maybe [(Id, Maybe Expr)]) -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
@@ -62,8 +62,8 @@ isTopLevel def = case def of
 instance Display StatementDef where
   display :: StatementDef -> String
   display statement = case statement of
-    FuncDef ty name params -> unwords ["FuncDef (", show ty, show name, show params, ")"]
-    FuncDec ty name params sts -> unwords ["FuncDec (", show ty, show name, show params, display sts, ")"]
+    FuncDec ty name params -> unwords ["FuncDef (", show ty, show name, show params, ")"]
+    FuncDef ty name params sts -> unwords ["FuncDec (", show ty, show name, show params, display sts, ")"]
     Enum name ty (Just vars) -> unwords ["Enum (", show name, show ty, displayVariants vars, ")"]
     Expr e -> "Expr (" ++ display e ++ " )"
     Var (var :| vars) -> unwords ("Var" : map displayVar (var : vars))
@@ -89,7 +89,7 @@ errs = concatMap err
   where
     err :: Statement -> [String]
     err statement = case def statement of
-      FuncDec _ _ _ sts -> Statement.errs sts
+      FuncDef _ _ _ sts -> Statement.errs sts
       Expr e -> Expr.errs [e]
       Var ((_, _, ex) :| vars) -> Expr.errs (catMaybes [ex]) ++ Expr.errs (mapMaybe (\(_, _, e) -> e) vars)
       If e st0 st1 -> Expr.errs [e] ++ errs (catMaybes [Just st0, st1])

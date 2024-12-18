@@ -33,7 +33,8 @@ statements sts = case sts of
 statement :: Statement -> State Context [Instruction]
 statement st = case Statement.def st of
   SD.Empty -> return []
-  SD.FuncDec ty name params body -> funcDef ty name params body
+  SD.FuncDec ty name params -> funcDec ty name params
+  SD.FuncDef ty name params body -> funcDef ty name params body
   SD.Block sts -> block sts
   SD.Expr e -> expr e
   SD.Var (v :| vs) -> vars (v : vs)
@@ -57,8 +58,12 @@ statement st = case Statement.def st of
       ins <- mapM (\(ty, name, e) -> var ty name e) vs
       return . concat $ ins
 
+funcDec :: Type -> Id -> [(Type, Maybe Id)] -> State Context [Instruction]
+funcDec ret name params = do
+  return []
+
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Instruction]
-funcDef _ (Id name) params body = do
+funcDef ret name params body = do
   context <- get
   put $ Context.newFunction context
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
