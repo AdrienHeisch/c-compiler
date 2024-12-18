@@ -3,7 +3,7 @@ module Compiler (compile) where
 import Constant (Constant (Constant))
 import Context (Context, declareFunc, defineFunc, getFunc, getLocals, newFunction, newScope)
 import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
-import Control.Monad.State.Lazy (State, evalState, get, put)
+import Control.Monad.State.Lazy (State, evalState, get, put, runState)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
 import Expr (Expr)
@@ -67,7 +67,10 @@ funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Context [Ins
 funcDef ret name params body = do
   !_ <- Context.defineFunc (Type.Function ret (map fst params), name)
   context <- get
-  put $ Context.newFunction context
+  let context' = Context.newFunction context
+  put context'
+  let (_, context'') = runState (collectLabels body) context'
+  put context''
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
   Context.addVars namedParams
   ins <- statements body
@@ -136,7 +139,6 @@ for finit fcond fincr fbody = do
   insBody <- statement fbody
   return $ insInit ++ [LABEL lblPre] ++ insCond ++ [JEQ R0 (Lbl lblPost)] ++ insBody ++ insIncr ++ [JMP (Lbl lblPre), LABEL lblPost]
 
-
 goto :: Id -> State Context [Instruction]
 goto (Id lbl) = do
   hasLabel <- Context.hasLabel lbl
@@ -146,9 +148,12 @@ goto (Id lbl) = do
 
 label :: Id -> Statement -> State Context [Instruction]
 label (Id lbl) st = do
-  Context.addLabel lbl
-  ins <- statement st
-  return $ LABEL lbl : ins
+  exists <- Context.hasLabel lbl
+  if exists
+    then do
+      ins <- statement st
+      return $ LABEL lbl : ins
+    else error "Label does not exist"
 
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
@@ -164,11 +169,11 @@ expr e = case Expr.def e of
   -- ED.UnopPost op ex -> []
   ED.Binop left Op.Assign right -> assign left right
   ED.Binop left op right -> case getBinaryAssignOp op of
-      Just innerOp -> do
-        insBinop <- binop (evalOrThrow e) left innerOp right
-        insAssign <- assign left right
-        return $ insBinop ++ insAssign
-      Nothing -> binop (evalOrThrow e) left op right
+    Just innerOp -> do
+      insBinop <- binop (evalOrThrow e) left innerOp right
+      insAssign <- assign left right
+      return $ insBinop ++ insAssign
+    Nothing -> binop (evalOrThrow e) left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
   ED.Call ex args -> call ex args
   ED.Parenthese ex -> expr ex
@@ -181,8 +186,8 @@ unop op ex = case op of
     insEx <- expr ex
     return $ insEx ++ [LOAD R0 (Reg R0)]
   Op.BitAndOrAddr -> do
-      insAddr <- exprAddress ex
-      return $ insAddr ++ [SET R0 (Reg R1)]
+    insAddr <- exprAddress ex
+    return $ insAddr ++ [SET R0 (Reg R1)]
   _ -> error $ "Operator not implemented : " ++ show op
 
 assign :: Expr -> Expr -> State Context [Instruction]
@@ -229,8 +234,8 @@ exprAddress :: Expr -> State Context [Instruction]
 exprAddress e = case Expr.def e of
   ED.Id name -> getVarAddr name
   ED.UnopPre Op.MultOrIndir e' -> do
-      insEx <- expr e'
-      return $ insEx ++ [SET R1 (Reg R0)]
+    insEx <- expr e'
+    return $ insEx ++ [SET R1 (Reg R0)]
   _ -> error $ "Can't get address of : " ++ show e
 
 getVarAddr :: Id -> State Context [Instruction]
@@ -240,6 +245,14 @@ getVarAddr name = do
     Nothing -> error $ "Undefined identifier : " ++ show name
     Just (idx, _) ->
       return [SET R1 (Reg BP), ADD R1 (Cst idx)]
+
+collectLabels :: [Statement] -> State Context ()
+collectLabels sts = case map Statement.def sts of
+  [] -> return ()
+  SD.Labeled (Id lbl) _ : _ -> do
+    Context.addLabel lbl
+    collectLabels $ tail sts
+  _ : _ -> collectLabels $ tail sts
 
 evalOrThrow :: Expr -> Type
 evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
