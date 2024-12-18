@@ -1,4 +1,4 @@
-module Context (Context (..), new, addVar, addVars, getVar, makeLabel, getLabel, makeAnonLabel) where
+module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, makeLabel, getLabel, makeAnonLabel) where
 
 import Control.Monad.State.Lazy (State, get, put)
 import Data.List (elemIndex, findIndex)
@@ -15,8 +15,14 @@ data Context = Context
   }
   deriving (Show)
 
-new :: Maybe Context -> Context
-new = Context [] []
+new :: Context
+new = Context [] [] Nothing
+
+newFunction :: Context -> Context
+newFunction prev@(Context vars _ _) = Context vars [] (Just prev)
+
+newScope :: Context -> Context
+newScope prev@(Context vars lbls _) = Context vars lbls (Just prev)
 
 addVars :: [(Type, Id)] -> State Context ()
 addVars vars = case vars of

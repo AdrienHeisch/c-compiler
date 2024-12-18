@@ -1,7 +1,7 @@
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
-import Context (Context)
+import Context (Context, newFunction)
 import Context qualified (new, addVar, addVars, makeLabel, getVar, makeAnonLabel, getLabel)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -20,7 +20,7 @@ import Type (Type (Int))
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
-compile decls = Program $ {- JMP (Lbl 0) :  -}evalState (declarations decls) (Context.new Nothing)
+compile decls = Program $ {- JMP (Lbl 0) :  -}evalState (declarations decls) Context.new
 
 declarations :: [Statement] -> State Context [Instruction]
 declarations decls = do
@@ -40,7 +40,7 @@ funcDef _ _ params body = do
   -- lbl <- (case name of Id "main" -> return 0; _ -> anonLabel)
   context <- get
   let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
-  put $ Context.new (Just context)
+  put $ Context.newFunction context
   Context.addVars namedParams
   ins <- statements body
   put context
