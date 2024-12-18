@@ -5,8 +5,8 @@ IR				Instruction register
 SP				Stack pointer
 BP				Base pointer
 RR				Return register
-PR				Used to store a pointer for operations
-C0, C1, S0...	General purpose registers
+R0 .. R3		General purpose caller-saved registers
+R4 .. R7		General purpose callee-saved registers
 SR				Status register with flags
 	ZF				Zero flag : result is 0
 	SF				Sign flag : result is negative
