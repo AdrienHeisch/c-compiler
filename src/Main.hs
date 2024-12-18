@@ -23,7 +23,7 @@ compileFile filePath = do
   let asm = compile topLevel
   putStrLn $ "Assembly " ++ filePath ++ " :"
   putStrLn $ display asm
-  let linkedProgram = Linker.link [asm]
+  let linkedProgram = Linker.link asm
   let bytecode = assemble linkedProgram
   print bytecode
   let bytes = BS.pack bytecode
