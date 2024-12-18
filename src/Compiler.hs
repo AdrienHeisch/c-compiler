@@ -132,8 +132,8 @@ label (Id lblName) st = do
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
   ED.Id name -> do
-    context <- get
-    case Context.getVar context name of
+    mvar <- Context.getVar name
+    case mvar of
       Nothing -> error $ "Undefined identifier : " ++ show name
       Just (idx, _) ->
         return [SET R0 (Reg BP), ADD R0 (Cst idx), LOAD R0 (Reg R0)]
@@ -161,8 +161,8 @@ expr e = case Expr.def e of
 
 assign :: Id -> Expr -> State Context [Instruction]
 assign name ex = do
-  context <- get
-  case Context.getVar context name of
+  mvar <- Context.getVar name
+  case mvar of
     Nothing -> error $ "Undefined identifier : " ++ show name
     Just (idx, _) -> do
       insEx <- expr ex

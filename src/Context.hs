@@ -36,10 +36,12 @@ addVar (ty, name) = do
   (Context f vars l p) <- get
   put $ Context f (vars ++ [(ty, name)]) l p
 
-getVar :: Context -> Id -> Maybe (Int, Type)
-getVar (Context _ vars _ _) name = case findIndex (byId name) vars of
-  Nothing -> Nothing
-  Just idx -> Just (idx * regLen, fst $ vars !! idx)
+getVar :: Id -> State Context (Maybe (Int, Type))
+getVar name = do
+  Context _ vars _ _ <- get
+  case findIndex (byId name) vars of
+    Nothing -> return Nothing
+    Just idx -> Just (idx * regLen, fst $ vars !! idx)
 
 makeLabel :: String -> State Context Int
 makeLabel lbl = _addLabel $ Just lbl
