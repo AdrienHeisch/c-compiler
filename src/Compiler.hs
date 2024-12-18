@@ -77,14 +77,13 @@ funcDef ret name params body = do
   return $ [LABEL nameStr, SET BP (Reg SP)] ++ ins
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
-var ty name mexpr = case mexpr of
-  Nothing -> do
-    Context.addVar (ty, name)
-    return []
-  Just ex -> do
-    Context.addVar (ty, name)
-    ins <- expr ex
-    return $ ins ++ [PUSH (Reg R0)]
+var ty name mexpr = do
+  !_ <- Context.addVar (ty, name)
+  case mexpr of
+    Nothing -> return []
+    Just ex -> do
+      ins <- expr ex
+      return $ ins ++ [PUSH (Reg R0)]
 
 block :: [Statement] -> State Context [Instruction]
 block sts = do
