@@ -2,7 +2,7 @@ module Compiler (compile) where
 
 import Constant (Constant (Constant))
 import Context (Context, declareFunc, defineFunc, getFunc, getLocals, newFunction, newScope)
-import Context qualified (addLabel, addVar, addVars, getVar, hasLabel, makeAnonLabel, new)
+import Context qualified (addLabel, addVar, getVar, hasLabel, makeAnonLabel, new)
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
@@ -69,12 +69,19 @@ funcDef ret name params body = do
   context <- get
   Context.newFunction
   collectLabels body
-  let namedParams = mapMaybe (\(t, n) -> (t,) <$> n) params
-  Context.addVars namedParams
+  let namedParams = mapMaybe (\(ty, nm) -> (ty,) <$> nm) params
+  loadParams namedParams
   ins <- statements body
   put context
   let Id nameStr = name
-  return $ [LABEL nameStr, SET BP (Reg SP)] ++ ins
+  return $ LABEL nameStr : ins
+
+loadParams :: [(Type, Id)] -> State Context ()
+loadParams params = case params of
+  [] -> return ()
+  (ty, name) : rest -> do
+    !_ <- Context.addVar (ty, name)
+    loadParams rest
 
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = do
@@ -213,13 +220,15 @@ binop _ left op right =
           return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ insOp
 
 call :: Expr -> [Expr] -> State Context [Instruction]
-call ex _ = case Expr.def ex of
+call ex params = case Expr.def ex of
   ED.Id name -> do
     mvar <- Context.getFunc name
     case mvar of
       Nothing -> error $ "Undefined identifier : " ++ show name
-      Just (_, Id nameStr, _) -> do
-        return [CALL (Lbl nameStr), SET R0 (Reg RR)]
+      Just (_, Id nameStr, False) -> error $ "Function has no definition : " ++ show nameStr
+      Just (_, Id nameStr, True) -> do
+        insParams <- map (\ins -> ins ++ [PUSH (Reg R0)]) <$> mapM expr params
+        return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ [CALL (Lbl nameStr), SET R0 (Reg RR), POP BP, POP LR]
   _ -> error "Unimplemented"
 
 return_ :: Maybe Expr -> State Context [Instruction]

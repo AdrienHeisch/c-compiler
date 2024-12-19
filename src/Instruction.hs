@@ -77,6 +77,7 @@ data Register
   = PC
   | SP
   | BP
+  | LR
   | RR
   | SR
   | FR

@@ -4,6 +4,7 @@
 - IR				Instruction register
 - SP				Stack pointer
 - BP				Base pointer
+- LR				Link register
 - RR				Return register
 - R0 .. R3		General purpose caller-saved registers
 - R4 .. R7		General purpose callee-saved registers
