@@ -178,14 +178,18 @@ expr e = case Expr.def e of
   _ -> error $ "Expression not implemented yet : " ++ show e
 
 unop :: Op -> Expr -> State Context [Instruction]
-unop op ex = case op of
-  Op.MultOrIndir -> do
-    insEx <- expr ex
-    return $ insEx ++ [LOAD R0 (Reg R0)]
-  Op.BitAndOrAddr -> do
-    insAddr <- exprAddress ex
-    return $ insAddr ++ [SET R0 (Reg R1)]
-  _ -> error $ "Operator not implemented : " ++ show op
+unop op ex =
+  let insOp = case op of
+        Op.MultOrIndir -> [LOAD R0 (Reg R0)]
+        Op.BitAndOrAddr -> [SET R0 (Reg R1)]
+        _ -> error $ "Operator not implemented : " ++ show op
+   in case op of
+    _ | Op.isUnopAddressing op -> do
+      insAddr <- exprAddress ex
+      return $ insAddr ++ insOp
+    _ | otherwise -> do
+      insEx <- expr ex
+      return $ insEx ++ insOp
 
 binop :: Type -> Expr -> Op -> Expr -> State Context [Instruction]
 binop _ left op right =
@@ -199,7 +203,7 @@ binop _ left op right =
         Op.Subscript -> [ADD R4 (Reg R0), LOAD R0 (Reg R4)]
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
-        _ | Op.isAddressing op -> do
+        _ | Op.isBinopAddressing op -> do
           insAddr <- exprAddress left
           insVal <- expr right
           return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ insOp
