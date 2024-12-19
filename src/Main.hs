@@ -1,6 +1,7 @@
 import Assembler (assemble)
 import Compiler (compile)
 import Data.ByteString qualified as BS
+import Instruction (Program)
 import Linker (link)
 import Parser qualified (parse)
 import Preprocessor qualified (process)
@@ -10,9 +11,14 @@ import Utils (Display (..))
 main :: IO ()
 main = do
   args <- getArgs
-  mapM_ compileFile args
+  files <- mapM compileFile args
+  let linkedProgram = Linker.link files
+  let bytecode = assemble linkedProgram
+  print bytecode
+  let bytes = BS.pack bytecode
+  BS.writeFile "output.bin" bytes
 
-compileFile :: FilePath -> IO ()
+compileFile :: FilePath -> IO Program
 compileFile filePath = do
   tokens <- Preprocessor.process filePath
   putStrLn $ "Preprocessor " ++ filePath ++ " :"
@@ -23,8 +29,4 @@ compileFile filePath = do
   let asm = compile topLevel
   putStrLn $ "Assembly " ++ filePath ++ " :"
   putStrLn $ display asm
-  let linkedProgram = Linker.link asm
-  let bytecode = assemble linkedProgram
-  print bytecode
-  let bytes = BS.pack bytecode
-  BS.writeFile "output.bin" bytes
+  return asm

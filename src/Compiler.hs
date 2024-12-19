@@ -225,8 +225,7 @@ call ex params = case Expr.def ex of
     mvar <- Context.getFunc name
     case mvar of
       Nothing -> error $ "Undefined identifier : " ++ show name
-      Just (_, Id nameStr, False) -> error $ "Function has no definition : " ++ show nameStr
-      Just (_, Id nameStr, True) -> do
+      Just (_, Id nameStr, _) -> do
         insParams <- map (\ins -> ins ++ [PUSH (Reg R0)]) <$> mapM expr params
         return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ [CALL (Lbl nameStr), SET R0 (Reg RR), POP BP, POP LR]
   _ -> error "Unimplemented"
