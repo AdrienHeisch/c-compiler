@@ -184,12 +184,12 @@ unop op ex =
         Op.BitAndOrAddr -> [SET R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
-    _ | Op.isUnopAddressing op -> do
-      insAddr <- exprAddress ex
-      return $ insAddr ++ insOp
-    _ | otherwise -> do
-      insEx <- expr ex
-      return $ insEx ++ insOp
+        _ | Op.isUnopAddressing op -> do
+          insAddr <- exprAddress ex
+          return $ insAddr ++ insOp
+        _ | otherwise -> do
+          insEx <- expr ex
+          return $ insEx ++ insOp
 
 binop :: Type -> Expr -> Op -> Expr -> State Context [Instruction]
 binop _ left op right =
