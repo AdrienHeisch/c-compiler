@@ -1,4 +1,4 @@
-module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr, isRightAssociative) where
 
 import Type (Type)
 import Type qualified (toStr)
@@ -137,6 +137,18 @@ getBinaryAssignOp op = case op of
   LShiftAssign -> Just LShift
   RShiftAssign -> Just RShift
   _ -> Nothing
+
+rightAssociative :: [Op]
+rightAssociative =
+  binaryAssign
+    ++ ternary
+    ++ [ Assign,
+         Member,
+         MemberPtr
+       ]
+
+isRightAssociative :: Op -> Bool
+isRightAssociative op = op `elem` rightAssociative
 
 precedence :: Op -> Int
 precedence op = case op of

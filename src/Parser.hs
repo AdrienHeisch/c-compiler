@@ -517,7 +517,8 @@ collectIndex = evalState (collectUntilDelimiter Dl.SqBr)
 binop :: [Token] -> ExprDef -> Op -> Expr -> Expr
 binop lTks leftDef op right = case right of
   Expr (ED.Binop r_left r_op r_right) rTks
-    | Op.precedence op <= Op.precedence r_op ->
+    | (Op.precedence op == Op.precedence r_op && not (Op.isRightAssociative op))
+        || Op.precedence op < Op.precedence r_op ->
         Expr (ED.Binop (binop lTks leftDef op r_left) r_op r_right) (lTks ++ rTks)
   Expr _ rTks -> Expr (ED.Binop (Expr leftDef lTks) op right) (lTks ++ rTks)
 
