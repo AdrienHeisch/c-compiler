@@ -11,7 +11,7 @@ import Expr qualified (Expr (..), eval)
 import Expr qualified as ED (ExprDef (..))
 import Identifier (Id (..))
 import Instruction (Instruction (..), Program (..), Register (..), Value (..))
-import Op (getBinaryAssignOp)
+import Op (Op)
 import Op qualified
 import Statement (Statement)
 import Statement qualified
@@ -165,11 +165,10 @@ expr e = case Expr.def e of
   -- ED.ArrayDecl exs -> []
   ED.UnopPre op ex -> unop op ex
   -- ED.UnopPost op ex -> []
-  ED.Binop left Op.Assign right -> assign left right
-  ED.Binop left op right -> case getBinaryAssignOp op of
+  ED.Binop left op right -> case Op.getBinaryAssignOp op of
     Just innerOp -> do
       insBinop <- binop (evalOrThrow e) left innerOp right
-      insAssign <- assign left right
+      insAssign <- binop (evalOrThrow e) left Op.Assign right
       return $ insBinop ++ insAssign
     Nothing -> binop (evalOrThrow e) left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
@@ -178,7 +177,7 @@ expr e = case Expr.def e of
   ED.Invalid str -> error $ "Invalid expression : " ++ str
   _ -> error $ "Expression not implemented yet : " ++ show e
 
-unop :: Op.Op -> Expr -> State Context [Instruction]
+unop :: Op -> Expr -> State Context [Instruction]
 unop op ex = case op of
   Op.MultOrIndir -> do
     insEx <- expr ex
@@ -188,24 +187,26 @@ unop op ex = case op of
     return $ insAddr ++ [SET R0 (Reg R1)]
   _ -> error $ "Operator not implemented : " ++ show op
 
-assign :: Expr -> Expr -> State Context [Instruction]
-assign left right = do
-  insAddr <- exprAddress left
-  insVal <- expr right
-  return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ [STORE R5 (Reg R0)]
-
-binop :: Type -> Expr -> Op.Op -> Expr -> State Context [Instruction]
-binop _ left op right = do
-  insL <- expr left
-  insR <- expr right
+binop :: Type -> Expr -> Op -> Expr -> State Context [Instruction]
+binop _ left op right =
   let insOp = case op of
-        Op.AddOrPlus -> ADD R0 (Reg R4)
-        Op.SubOrNeg -> SUB R0 (Reg R4)
-        Op.MultOrIndir -> MUL R0 (Reg R4)
-        Op.Div -> DIV R0 (Reg R4)
-        Op.Mod -> MOD R0 (Reg R4)
+        Op.AddOrPlus -> [ADD R0 (Reg R4)]
+        Op.SubOrNeg -> [SUB R0 (Reg R4)]
+        Op.MultOrIndir -> [MUL R0 (Reg R4)]
+        Op.Div -> [DIV R0 (Reg R4)]
+        Op.Mod -> [MOD R0 (Reg R4)]
+        Op.Assign -> [STORE R5 (Reg R0)]
+        Op.Subscript -> [ADD R4 (Reg R0), LOAD R0 (Reg R4)]
         _ -> error $ "Operator not implemented : " ++ show op
-  return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ [insOp]
+   in case op of
+        _ | Op.isAddressing op -> do
+          insAddr <- exprAddress left
+          insVal <- expr right
+          return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ insOp
+        _ | otherwise -> do
+          insL <- expr left
+          insR <- expr right
+          return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ insOp
 
 call :: Expr -> [Expr] -> State Context [Instruction]
 call ex _ = case Expr.def ex of
