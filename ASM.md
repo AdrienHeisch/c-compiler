@@ -42,7 +42,7 @@ With N being a register, a constant or a label
 | 0x0D | SUB RX N    | Subtract N from RX                                            |
 | 0x0E | MUL RX N    | Multiply RX and N                                             |
 | 0x0F | DIV RX N    | Divide RX with N                                              |
-| 0x10 | DIV RX N    | Divide RX with N                                              |
+| 0x10 | MOD RX N    | Modulo RX with N                                              |
 | 0x11 | NOT RX _    | Perform a bitwise NOT operation in RX                         |
 | 0x12 | AND RX N    | Perform a bitwise AND operation between RX and N              |
 | 0x13 | OR RX N     | Perform a bitwise OR operation between RX and N               |
@@ -60,7 +60,7 @@ With N being a register, a constant or a label
 | 0x1F | POP RX _    | Pop the top value from the stack into RX                      |
 | 0x20 | DROP _ _    | Pop the top value from the stack and discard it               |
 | 0x21 | CALL _ N    | Call a subroutine at address N                                |
-| 0x22 | RET _ _     | Return the value from the subroutine                          |
+| 0x22 | RET _ N     | Return N from the subroutine                                  |
 | 0x23 | JMP _ N     | Jump to instruction N                                         |
 | 0x24 | JEQ RX N    | Jump if RX is equal to zero                                   |
 | 0x25 | JNE RX N    | Jump if RX is not equal to zero                               |
@@ -68,8 +68,8 @@ With N being a register, a constant or a label
 | 0x27 | JGE RX N    | Jump if RX is greater than or equal to zero                   |
 | 0x28 | JLT RX N    | Jump if RX is lesser than zero                                |
 | 0x29 | JLE RX N    | Jump if RX is lesser than or equal to zero                    |
-| 0x2A | PRINT _ N   | Print the value N to stdout                                   |
-| 0x2B | EPRINT _ N  | Print the value N to stderr                                   |
+| 0x2A | PRINT _ N   | Print N to stdout                                             |
+| 0x2B | EPRINT _ N  | Print N to stderr                                             |
 | 0x2C | DUMP _ _    | Print the value of all registers to strerr                    |
 
 # Encoding

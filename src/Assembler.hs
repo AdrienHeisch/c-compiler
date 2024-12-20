@@ -88,9 +88,9 @@ bytecode instr = case instr of
   JLT r (Cst c) -> makeRC r c
   JLE r (Reg r') -> makeRR r r'
   JLE r (Cst c) -> makeRC r c
-  PRINT (Reg r) -> makeR_ r
+  PRINT (Reg r) -> make_R r
   PRINT (Cst c) -> make_C c
-  EPRINT (Reg r) -> makeR_ r
+  EPRINT (Reg r) -> make_R r
   EPRINT (Cst c) -> make_C c
   DUMP -> make
   LABEL _ -> error "Label instructions should not appear at this point"
