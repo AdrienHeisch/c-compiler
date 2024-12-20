@@ -68,8 +68,8 @@ With N being a register, a constant or a label
 | 0x27 | JGE RX N    | Jump if RX is greater than or equal to zero                   |
 | 0x28 | JLT RX N    | Jump if RX is lesser than zero                                |
 | 0x29 | JLE RX N    | Jump if RX is lesser than or equal to zero                    |
-| 0x2A | PRINT RX _  | Print the value of RX to stdout                               |
-| 0x2B | EPRINT RX _ | Print the value of RX to stderr                               |
+| 0x2A | PRINT _ N   | Print the value N to stdout                                   |
+| 0x2B | EPRINT _ N  | Print the value N to stderr                                   |
 | 0x2C | DUMP _ _    | Print the value of all registers to strerr                    |
 
 # Encoding
