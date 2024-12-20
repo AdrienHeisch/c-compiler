@@ -182,7 +182,7 @@ expr e = case Expr.def e of
   ED.Call ex args -> call ex args
   ED.Parenthese ex -> expr ex
   ED.Invalid str -> error $ "Invalid expression : " ++ str
-  _ -> error $ "Expression not implemented yet : " ++ show e
+  _ -> error $ "Expression not implemented yet : " ++ display e
 
 unop :: Op -> Expr -> State Context [Instruction]
 unop op ex =
@@ -247,7 +247,7 @@ exprAddress e = case Expr.def e of
   ED.UnopPre Op.MultOrIndir e' -> do
     insEx <- expr e'
     return $ insEx ++ [SET R1 (Reg R0)]
-  _ -> error $ "Can't get address of : " ++ show e
+  _ -> error $ "Can't get address of : " ++ display e
 
 getVarAddr :: Id -> State Context [Instruction]
 getVarAddr name = do
