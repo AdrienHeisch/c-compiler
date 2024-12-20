@@ -261,6 +261,7 @@ makeType spec = go spec Nothing False
                           return (Left (Ty.Array ty len, name), take 1 tokens)
                     _ -> return (Right $ "Invalid array size : " ++ show lenTks, lenTks)
         TD.DelimOpen Dl.Pr -> do
+          modify $ drop 1
           tys <- parseListWithInner (TD.Op Op.Comma) Dl.Pr getType
           case params tys of
             Left ps -> return (Left (Ty.Pointer (Ty.Function ty ps), name), take 1 tokens) -- FIXME function returning pointer or pointer to function ?
