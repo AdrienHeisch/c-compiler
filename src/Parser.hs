@@ -240,7 +240,7 @@ makeType spec = go spec Nothing False
         TD.DelimOpen Dl.Pr
           | not pr -> do
               modify $ drop 1
-              go (Ty.Pointer ty) Nothing True
+              go ty Nothing True
         tk | pr -> return (Right $ "Unexpected token " ++ show tk, take 1 tokens)
         _ -> thenGo ty name
 
