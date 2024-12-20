@@ -1,4 +1,4 @@
-module Expr (Expr (..), ExprDef (..), InitializerKind (..), eval, errs) where
+module Expr (Expr (..), ExprDef (..), InitializerKind (..), errs) where
 
 import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Data.List (intercalate)
@@ -6,7 +6,6 @@ import Identifier (Id)
 import Op (Op)
 import Token (Token, foldCrs)
 import Type (Type)
-import Type qualified (Type (..))
 import Utils (Display (..))
 
 data Expr = Expr {def :: ExprDef, tks :: [Token]}
@@ -15,33 +14,6 @@ data Expr = Expr {def :: ExprDef, tks :: [Token]}
 instance Display Expr where
   display :: Expr -> String
   display = display . def
-
-eval :: Expr -> Either Type String
-eval expr = case Expr.def expr of
-  Id _ -> Right "Can't evaluate identifier"
-  IntLiteral (Constant ty _) -> Left ty
-  FltLiteral (Constant ty _) -> Left ty
-  StrLiteral (Constant ty _) -> Left ty
-  Initializer _ -> Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
-  UnopPre _ ex -> eval ex -- TODO probably wrong
-  UnopPost _ ex -> eval ex -- TODO probably wrong
-  Binop left _ right -> case eval left of -- TODO probably wrong
-    Left Type.Infer -> eval right
-    ret -> ret
-  Ternary _ ter_then ter_else -> case eval ter_then of -- TODO probably wrong
-    Left Type.Infer -> eval ter_else
-    ret -> ret
-  Call ex _ -> call (eval ex)
-  Parenthese ex -> eval ex
-  SizeofType _ -> Left Type.Int
-  Invalid str -> Right $ "Evaluating invalid expression : " ++ str
-  where
-    call :: Either Type String -> Either Type String
-    call mty = case mty of
-      Left (Type.Function ty _) -> Left ty
-      Left (Type.Pointer ty) -> call (Left ty)
-      Left ty -> Right $ "Tried to call a value of type " ++ show ty
-      Right err -> Right err
 
 data ExprDef
   = Id Id

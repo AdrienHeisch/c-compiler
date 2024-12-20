@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-type-defaults #-}
+
 module Compiler (compile) where
 
 import Constant (Constant (Constant))
@@ -6,9 +8,10 @@ import Context qualified (addLabel, addVar, getVar, hasLabel, makeAnonLabel, new
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
-import Expr (Expr)
-import Expr qualified (Expr (..), eval)
+import Expr (Expr, InitializerKind)
+import Expr qualified (Expr (..))
 import Expr qualified as ED (ExprDef (..))
+import Expr qualified as IK (InitializerKind (..))
 import Identifier (Id (..))
 import Instruction (Instruction (..), Program (..), Register (..), Value (..))
 import Op (Op)
@@ -16,7 +19,7 @@ import Op qualified
 import Statement (Statement)
 import Statement qualified
 import Statement qualified as SD (StatementDef (..))
-import Type (Type)
+import Type (Type, sizeof)
 import Type qualified (Type (..))
 import Utils (Display (display), maybeListToList)
 
@@ -86,11 +89,23 @@ loadParams params = case params of
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = do
   !_ <- Context.addVar (ty, name)
+  let insPush = replicate (ceiling $ fromIntegral (sizeof ty) / 8) (PUSH (Cst 0))
   case mexpr of
-    Nothing -> return [PUSH (Cst 0)]
-    Just ex -> do
-      ins <- expr ex
-      return $ ins ++ [PUSH (Reg R0)]
+    Nothing -> return insPush
+    Just ex -> case Expr.def ex of
+      ED.Initializer exs -> initializer exs
+      _ -> do
+        ins <- expr ex
+        return $ ins ++ [PUSH (Reg R0)]
+
+initializer :: [(InitializerKind, Expr)] -> State Context [Instruction]
+initializer exs = case exs of
+  [] -> return []
+  (IK.Simple, ex) : _ -> do
+    insEx <- expr ex
+    insRest <- initializer $ tail exs
+    return $ insEx ++ [PUSH (Reg R0)] ++ insRest
+  (ik, _) : _ -> error $ "Initializer not implemented " ++ show ik
 
 block :: [Statement] -> State Context [Instruction]
 block sts = do
@@ -169,15 +184,17 @@ expr e = case Expr.def e of
     return [SET R0 (Cst int)]
   -- ED.FltLiteral flt -> []
   -- ED.StrLiteral str -> []
-  -- ED.ArrayDecl exs -> []
+  ED.Initializer _ -> error $ "Can't evaluate initializer : " ++ display e
   ED.UnopPre op ex -> unop op ex
   -- ED.UnopPost op ex -> []
-  ED.Binop left op right -> case Op.getBinaryAssignOp op of
-    Just innerOp -> do
-      insBinop <- binop (evalOrThrow e) left innerOp right
-      insAssign <- binop (evalOrThrow e) left Op.Assign right
-      return $ insBinop ++ insAssign
-    Nothing -> binop (evalOrThrow e) left op right
+  ED.Binop left op right -> do
+    ty <- evalOrThrow e
+    case Op.getBinaryAssignOp op of
+      Just innerOp -> do
+        insBinop <- binop ty left innerOp right
+        insAssign <- binop ty left Op.Assign right
+        return $ insBinop ++ insAssign
+      Nothing -> binop ty left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
   ED.Call ex args -> call ex args
   ED.Parenthese ex -> expr ex
@@ -199,7 +216,7 @@ unop op ex =
           return $ insEx ++ insOp
 
 binop :: Type -> Expr -> Op -> Expr -> State Context [Instruction]
-binop _ left op right =
+binop ty left op right =
   let insOp = case op of
         Op.AddOrPlus -> [ADD R0 (Reg R4)]
         Op.SubOrNeg -> [SUB R0 (Reg R4)]
@@ -207,7 +224,9 @@ binop _ left op right =
         Op.Div -> [DIV R0 (Reg R4)]
         Op.Mod -> [MOD R0 (Reg R4)]
         Op.Assign -> [STORE R5 (Reg R0)]
-        Op.Subscript -> [ADD R4 (Reg R0), LOAD R0 (Reg R4)]
+        Op.Subscript -> case ty of
+          Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
+          _ -> error "Subscript on invalid value"
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
         _ | Op.isBinopAddressing op -> do
@@ -247,6 +266,10 @@ exprAddress e = case Expr.def e of
   ED.UnopPre Op.MultOrIndir e' -> do
     insEx <- expr e'
     return $ insEx ++ [SET R1 (Reg R0)]
+  ED.Binop left Op.Subscript right -> do
+    insAddr <- exprAddress left
+    insVal <- expr right
+    return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ [MUL R0 (Cst 8), ADD R5 (Reg R0), SET R1 (Reg R5)] -- FIXME remove the 8
   _ -> error $ "Can't get address of : " ++ display e
 
 getVarAddr :: Id -> State Context [Instruction]
@@ -265,5 +288,44 @@ collectLabels sts = case map Statement.def sts of
     collectLabels $ tail sts
   _ : _ -> collectLabels $ tail sts
 
-evalOrThrow :: Expr -> Type
-evalOrThrow ex = case Expr.eval ex of Left ty -> ty; Right err -> error err
+eval :: Expr -> State Context (Either Type String)
+eval ex = case Expr.def ex of
+  ED.Id name -> do
+    mty <- Context.getVar name
+    case mty of
+      Just (_, ty) -> return $ Left ty
+      Nothing -> eval ex
+  ED.IntLiteral (Constant ty _) -> return $ Left ty
+  ED.FltLiteral (Constant ty _) -> return $ Left ty
+  ED.StrLiteral (Constant ty _) -> return $ Left ty
+  ED.Initializer _ -> return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
+  ED.UnopPre _ ex' -> eval ex' -- TODO probably wrong
+  ED.UnopPost _ ex' -> eval ex' -- TODO probably wrong
+  ED.Binop left _ right -> do
+    ev <- eval left
+    case ev of -- TODO probably wrong
+      Left Type.Infer -> eval right
+      ret -> return ret
+  ED.Ternary _ ter_then ter_else -> do
+    ev <- eval ter_then
+    case ev of -- TODO probably wrong
+      Left Type.Infer -> eval ter_else
+      ret -> return ret
+  ED.Call ex' _ -> do
+    ev <- eval ex'
+    return $ evalCall ev
+  ED.Parenthese ex' -> eval ex'
+  ED.SizeofType _ -> return $ Left Type.Int
+  ED.Invalid str -> return $ Right $ "Evaluating invalid expression : " ++ str
+  where
+    evalCall :: Either Type String -> Either Type String
+    evalCall mty = case mty of
+      Left (Type.Function ty _) -> Left ty
+      Left (Type.Pointer ty) -> evalCall (Left ty)
+      Left ty -> Right $ "Tried to call a value of type " ++ show ty
+      Right err -> Right err
+
+evalOrThrow :: Expr -> State Context Type
+evalOrThrow ex = do
+  ev <- eval ex
+  return $ case ev of Left ty -> ty; Right err -> error err

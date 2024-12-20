@@ -54,7 +54,7 @@ isUnaryPre :: Op -> Bool
 isUnaryPre op = op `elem` unaryPre
 
 unaryPost :: [Op]
-unaryPost = [Subscript, Increment, Decrement]
+unaryPost = [Increment, Decrement]
 
 isUnaryPost :: Op -> Bool
 isUnaryPost op = op `elem` unaryPost
@@ -92,7 +92,8 @@ binary =
     Assign,
     Member,
     MemberPtr,
-    Comma
+    Comma,
+    Subscript
   ]
 
 isBinary :: Op -> Bool
@@ -162,7 +163,8 @@ binopAddressing :: [Op]
 binopAddressing =
   [ Assign,
     Member,
-    MemberPtr
+    MemberPtr,
+    Subscript
   ]
 
 isBinopAddressing :: Op -> Bool

@@ -1,11 +1,10 @@
 module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals) where
 
 import Control.Monad.State.Lazy (State, get, put)
-import Data.List (find, findIndex)
+import Data.List (find)
 import Identifier (Id)
 import Identifier qualified as Id (toStr)
-import Instruction (regLen)
-import Type (Type)
+import Type (Type, sizeof)
 import Type qualified (toStr)
 import Utils (modifyFirst)
 
@@ -52,7 +51,7 @@ addVar (ty, name) = do
 getLocals :: State Context [(Int, Type)]
 getLocals = do
   Context _ vars _ _ _ <- get
-  return (zipWith (curry (\(idx, (ty, _)) -> (idx, ty))) [0..] vars)
+  return (zipWith (curry (\(idx, (ty, _)) -> (idx, ty))) [0 ..] vars)
 
 getVar :: Id -> State Context (Maybe (Int, Type))
 getVar = findVar True
@@ -60,10 +59,16 @@ getVar = findVar True
 findVar :: Bool -> Id -> State Context (Maybe (Int, Type))
 findVar doPrev name = do
   Context _ vars _ addr _ <- get
-  case findIndex (byId name) vars of
-    Just idx -> return $ Just ((addr + idx) * regLen, fst $ vars !! idx)
+  case go vars 0 of
+    Just (idx, ty) -> return $ Just (addr + idx, ty)
     Nothing | doPrev -> lookInPrev $ findVar doPrev name
     Nothing -> return Nothing
+  where
+    go :: [Var] -> Int -> Maybe (Int, Type)
+    go vars idx = case vars of
+      [] -> Nothing
+      (ty, name') : _ | name == name' -> Just (idx, ty)
+      (ty, _) : rest -> go rest (idx + sizeof ty)
 
 defineFunc :: (Type, Id) -> State Context ()
 defineFunc f = _addFunc f True

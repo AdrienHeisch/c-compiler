@@ -471,7 +471,9 @@ exprNext taken ex tokens = case map Token.def tokens of
   [] -> Expr ex taken
   [TD.Op op] | Op.isUnaryPost op -> Expr (ED.UnopPost op (Expr ex taken)) tks
   TD.Op op : _ | Op.isBinary op -> binop tks ex op (expr (tail tokens))
-  TD.DelimOpen Dl.SqBr : _ -> binop tks ex Op.Subscript (expr (collectIndex (tail tokens)))
+  TD.DelimOpen Dl.SqBr : _ -> 
+    let (subscript, rest) = collectIndex (tail tokens)
+     in exprNext tokens (ED.Binop (Expr ex taken) Op.Subscript (expr subscript)) rest
   TD.DelimOpen Dl.Pr : _ ->
     let args = collectArguments (tail tokens)
      in Expr (ED.Call (Expr ex taken) (exprList args)) (taken ++ take (1 + length args) tokens)
@@ -511,8 +513,8 @@ collectParenthese = collectUntilDelimiter Dl.Pr
 collectArguments :: [Token] -> [Token]
 collectArguments = evalState (collectUntilDelimiter Dl.Pr)
 
-collectIndex :: [Token] -> [Token]
-collectIndex = evalState (collectUntilDelimiter Dl.SqBr)
+collectIndex :: [Token] -> ([Token], [Token])
+collectIndex = runState (collectUntilDelimiter Dl.SqBr)
 
 binop :: [Token] -> ExprDef -> Op -> Expr -> Expr
 binop lTks leftDef op right = case right of
