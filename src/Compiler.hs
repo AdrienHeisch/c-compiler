@@ -232,11 +232,11 @@ binop ty left op right =
         _ | Op.isBinopAddressing op -> do
           insAddr <- exprAddress left
           insVal <- expr right
-          return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ insOp
+          return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
         _ | otherwise -> do
           insL <- expr left
           insR <- expr right
-          return $ insR ++ [SET R4 (Reg R0)] ++ insL ++ insOp
+          return $ insR ++ [PUSH (Reg R0)] ++ insL ++ [POP R4] ++ insOp
 
 call :: Expr -> [Expr] -> State Context [Instruction]
 call ex params = case Expr.def ex of
@@ -276,7 +276,7 @@ exprAddress e = case Expr.def e of
   ED.Binop left Op.Subscript right -> do
     insAddr <- exprAddress left
     insVal <- expr right
-    return $ insAddr ++ [SET R5 (Reg R1)] ++ insVal ++ [MUL R0 (Cst 8), ADD R5 (Reg R0), SET R1 (Reg R5)] -- FIXME remove the 8
+    return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [MUL R0 (Cst 8), POP R5, ADD R5 (Reg R0), SET R1 (Reg R5)] -- FIXME remove the 8
   _ -> error $ "Can't get address of : " ++ display e
 
 getVarAddr :: Id -> State Context [Instruction]
