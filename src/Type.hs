@@ -1,8 +1,11 @@
-module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr) where
+module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask) where
 
+import Data.Bits (Bits (shiftL, (.&.)))
+import Data.List (intercalate)
+import Debug.Trace (trace)
 import Identifier (Id)
 import Identifier qualified
-import Data.List (intercalate)
+import Instruction (regLen)
 
 data Type
   = Infer
@@ -89,25 +92,29 @@ isFloating ty = ty `elem` floating
 
 sizeof :: Type -> Int
 sizeof ty = case ty of
-  -- Bool -> 1
-  -- Char -> 1
-  -- UChar -> 1
-  -- Short -> 2
-  -- UShort -> 2
-  -- Int -> 4
-  -- UInt -> 4
-  -- Long -> 8
-  -- ULong -> 8
-  -- LLong -> 8
-  -- ULLong -> 8
-  -- Float -> 4
-  -- Double -> 8
-  -- LDouble -> 8
-  -- Pointer _ -> 8
+  Bool -> 1
+  Char -> 1
+  UChar -> 1
+  Short -> 2
+  UShort -> 2
+  Int -> 4
+  UInt -> 4
+  Long -> 8
+  ULong -> 8
+  LLong -> 8
+  ULLong -> 8
+  Float -> 4
+  Double -> 8
+  LDouble -> 8
+  Pointer _ -> 8
   Array ty' len' -> sizeof ty' * len'
-  _ -> 8 -- FIXME this is for testing
-  -- _ -> error "Unsized type"
+  _ -> error "Unsized type"
 
+paddedSizeof :: Type -> Int
+paddedSizeof ty = trace (show $ (((sizeof ty - 1) `div` regLen) + 1) * regLen) $ (((sizeof ty - 1) `div` regLen) + 1) * regLen
+
+mask :: Type -> Int
+mask ty = (1 `shiftL` regLen) - 1 .&. (1 `shiftL` sizeof ty) - 1
 
 toStr :: Type -> String
 toStr ty = case ty of
@@ -127,7 +134,7 @@ toStr ty = case ty of
   Float -> "float"
   Double -> "double"
   LDouble -> "long double"
-  Array ty' arrlen -> toStr ty' ++ " [" ++ show arrlen ++ "]"
+  Array ty' arrlen -> toStr ty' ++ " [" ++ show arrlen ++ "]" -- TODO use maybe and remove arraynohint
   ArrayNoHint ty' -> toStr ty' ++ " []"
   Struct Nothing fields -> "struct { " ++ show fields ++ " }"
   Struct (Just name) fields -> "struct " ++ Identifier.toStr name ++ " { " ++ show fields ++ " }"

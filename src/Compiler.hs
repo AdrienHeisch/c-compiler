@@ -8,6 +8,7 @@ import Context qualified (addLabel, addVar, getVar, hasLabel, makeAnonLabel, new
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
+import Debug.Trace (trace)
 import Expr (Expr, InitializerKind)
 import Expr qualified (Expr (..))
 import Expr qualified as ED (ExprDef (..))
@@ -19,8 +20,8 @@ import Op qualified
 import Statement (Statement)
 import Statement qualified
 import Statement qualified as SD (StatementDef (..))
-import Type (Type, sizeof)
-import Type qualified (Type (..))
+import Type (Type, paddedSizeof, sizeof)
+import Type qualified (Type (..), mask)
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program
@@ -90,21 +91,38 @@ var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = do
   !_ <- Context.addVar (ty, name)
   case mexpr of
-    Nothing -> return [ADD SP (Cst $ sizeof ty)]
+    Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
     Just ex -> case Expr.def ex of
-      ED.Initializer exs -> initializer exs
+      ED.Initializer exs -> do
+        ins <- initializer ty exs
+        return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
       _ -> do
         ins <- expr ex
         return $ ins ++ [PUSH (Reg R0)]
 
-initializer :: [(InitializerKind, Expr)] -> State Context [Instruction]
-initializer exs = case exs of
-  [] -> return []
-  (IK.Simple, ex) : _ -> do
-    insEx <- expr ex
-    insRest <- initializer $ tail exs
-    return $ insEx ++ [PUSH (Reg R0)] ++ insRest
-  (ik, _) : _ -> error $ "Initializer not implemented " ++ show ik
+initializer :: Type -> [(InitializerKind, Expr)] -> State Context [Instruction]
+initializer ty = go 0
+  where
+  go idx exs = case exs of
+    [] -> return []
+    (IK.Simple, ex) : _ -> do
+      insEx <- expr ex
+      insRest <- go (idx + 1) $ tail exs
+      return $ insEx ++ [STORE R6 (Reg R0), ADD R6 (Cst $ sizeAt idx)] ++ insRest
+    ex@(ik@(IK.Index _), _) : next : _ -> do
+      isUnified <- unified ex next
+      if isUnified
+        then error $ "Initializer not implemented " ++ show ik
+        else error "Index initialized but list is not uniform"
+    (ik, _) : _ -> error $ "Initializer not implemented " ++ show ik
+  sizeAt _ = case ty of
+    Type.Array ty' _ -> sizeof ty'
+    Type.ArrayNoHint ty' -> sizeof ty'
+    _ -> error "Invalid type for initializer"
+  unified (_, first) (_, next) = do
+    fTy <- evalOrThrow first
+    nTy <- evalOrThrow next
+    return $ fTy == nTy
 
 block :: [Statement] -> State Context [Instruction]
 block sts = do
@@ -177,8 +195,12 @@ label (Id lbl) st = do
 expr :: Expr -> State Context [Instruction]
 expr e = case Expr.def e of
   ED.Id name -> do
-    insVar <- getVarAddr name
-    return $ insVar ++ [LOAD R0 (Reg R1)]
+    mvar <- Context.getVar name
+    case mvar of
+      Just (_, _) -> do
+        insVar <- getVarAddr name
+        return $ insVar ++ [LOAD R0 (Reg R1)]
+      Nothing -> error $ "Undefined identifier : " ++ show name
   ED.IntLiteral (Constant Type.Int int) -> do
     return [SET R0 (Cst int)]
   -- ED.FltLiteral flt -> []
@@ -224,7 +246,7 @@ binop ty left op right =
         Op.Mod -> [MOD R0 (Reg R4)]
         Op.Assign -> [STORE R5 (Reg R0)]
         Op.Subscript -> case ty of
-          Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
+          Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5), AND R0 (Cst $ trace (show $ Type.mask ty') Type.mask ty')]
           Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
           _ -> error "Subscript on invalid value"
         _ -> error $ "Operator not implemented : " ++ show op
@@ -276,7 +298,7 @@ exprAddress e = case Expr.def e of
   ED.Binop left Op.Subscript right -> do
     insAddr <- exprAddress left
     insVal <- expr right
-    return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [MUL R0 (Cst 8), POP R5, ADD R5 (Reg R0), SET R1 (Reg R5)] -- FIXME remove the 8
+    return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5, MUL R0 (Cst 8), ADD R5 (Reg R0), SET R1 (Reg R5)] -- FIXME remove the 8
   _ -> error $ "Can't get address of : " ++ display e
 
 getVarAddr :: Id -> State Context [Instruction]

@@ -4,7 +4,7 @@ import Control.Monad.State.Lazy (State, get, put)
 import Data.List (find)
 import Identifier (Id)
 import Identifier qualified as Id (toStr)
-import Type (Type, sizeof)
+import Type (Type, paddedSizeof)
 import Type qualified (toStr)
 import Utils (modifyFirst)
 
@@ -68,7 +68,7 @@ findVar doPrev name = do
     go vars idx = case vars of
       [] -> Nothing
       (ty, name') : _ | name == name' -> Just (idx, ty)
-      (ty, _) : rest -> go rest (idx + sizeof ty)
+      (ty, _) : rest -> go rest (idx + paddedSizeof ty)
 
 defineFunc :: (Type, Id) -> State Context ()
 defineFunc f = _addFunc f True
