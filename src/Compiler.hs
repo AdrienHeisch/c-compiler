@@ -245,17 +245,16 @@ call ex params = case Expr.def ex of
   ED.Id name -> do
     mfunc <- Context.getFunc name
     case mfunc of
-      Just (_, Id nameStr, _) -> go [] (Lbl nameStr)
+      Just (_, Id nameStr, _) -> go (Lbl nameStr)
       Nothing -> do
-        mvar <- Context.getVar name
-        case mvar of
-          Just (addr, _) -> go [LOAD R0 (Cst addr)] (Reg R0)
-          Nothing -> error $ "Undefined function identifier : " ++ show name
+        insAddr <- expr ex
+        insCall <- go (Reg R7)
+        return $ insAddr ++ [SET R7 (Reg R0)] ++ insCall -- FIXME that's a hack
   _ -> error "Unimplemented call operand"
   where
-    go pre addr = do
+    go addr = do
       insParams <- map (\ins -> ins ++ [PUSH (Reg R0)]) <$> mapM expr params
-      return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ pre ++ [CALL addr, SET R0 (Reg RR), POP BP, POP LR]
+      return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ [CALL addr, SET R0 (Reg RR), POP BP, POP LR]
 
 return_ :: Maybe Expr -> State Context [Instruction]
 return_ mexpr = do
