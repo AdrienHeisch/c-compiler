@@ -89,9 +89,8 @@ loadParams params = case params of
 var :: Type -> Id -> Maybe Expr -> State Context [Instruction]
 var ty name mexpr = do
   !_ <- Context.addVar (ty, name)
-  let insPush = [ADD SP (Cst $ sizeof ty)]
   case mexpr of
-    Nothing -> return insPush
+    Nothing -> return [ADD SP (Cst $ sizeof ty)]
     Just ex -> case Expr.def ex of
       ED.Initializer exs -> initializer exs
       _ -> do
