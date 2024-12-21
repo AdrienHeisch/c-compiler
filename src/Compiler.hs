@@ -240,14 +240,21 @@ binop ty left op right =
 
 call :: Expr -> [Expr] -> State Context [Instruction]
 call ex params = case Expr.def ex of
+  ED.Parenthese ex' -> call ex' params
   ED.Id name -> do
-    mvar <- Context.getFunc name
-    case mvar of
-      Nothing -> error $ "Undefined identifier : " ++ show name
-      Just (_, Id nameStr, _) -> do
-        insParams <- map (\ins -> ins ++ [PUSH (Reg R0)]) <$> mapM expr params
-        return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ [CALL (Lbl nameStr), SET R0 (Reg RR), POP BP, POP LR]
-  _ -> error "Unimplemented"
+    mfunc <- Context.getFunc name
+    case mfunc of
+      Just (_, Id nameStr, _) -> go [] (Lbl nameStr)
+      Nothing -> do
+        mvar <- Context.getVar name
+        case mvar of
+          Just (addr, _) -> go [LOAD R0 (Cst addr)] (Reg R0)
+          Nothing -> error $ "Undefined function identifier : " ++ show name
+  _ -> error "Unimplemented call operand"
+  where
+    go pre addr = do
+      insParams <- map (\ins -> ins ++ [PUSH (Reg R0)]) <$> mapM expr params
+      return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ pre ++ [CALL addr, SET R0 (Reg RR), POP BP, POP LR]
 
 return_ :: Maybe Expr -> State Context [Instruction]
 return_ mexpr = do
@@ -276,9 +283,14 @@ getVarAddr :: Id -> State Context [Instruction]
 getVarAddr name = do
   mvar <- Context.getVar name
   case mvar of
-    Nothing -> error $ "Undefined identifier : " ++ show name
     Just (idx, _) ->
       return [SET R1 (Reg BP), ADD R1 (Cst idx)]
+    Nothing -> do
+      mfunc <- Context.getFunc name
+      case mfunc of
+        Just (_, Id nameStr, _) -> do
+          return [SET R1 (Lbl nameStr)]
+        Nothing -> error $ "Undefined identifier : " ++ show name
 
 collectLabels :: [Statement] -> State Context ()
 collectLabels sts = case map Statement.def sts of

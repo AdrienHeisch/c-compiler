@@ -44,17 +44,21 @@ secondPass ins = case ins of
 
 replaceLabels :: Instruction -> AsmState Instruction
 replaceLabels instr = case instr of
-  CALL (Lbl lbl) -> do cst <- replace lbl; return $ CALL cst
-  JMP (Lbl lbl) -> do cst <- replace lbl; return $ JMP cst
-  JEQ r (Lbl lbl) -> do cst <- replace lbl; return $ JEQ r cst
-  JNE r (Lbl lbl) -> do cst <- replace lbl; return $ JNE r cst
-  JGT r (Lbl lbl) -> do cst <- replace lbl; return $ JGT r cst
-  JGE r (Lbl lbl) -> do cst <- replace lbl; return $ JGE r cst
-  JLT r (Lbl lbl) -> do cst <- replace lbl; return $ JLT r cst
-  JLE r (Lbl lbl) -> do cst <- replace lbl; return $ JLE r cst
+  SET r (Lbl lbl) -> mk (SET r) lbl
+  CALL (Lbl lbl) -> mk CALL lbl
+  JMP (Lbl lbl) -> mk JMP lbl
+  JEQ r (Lbl lbl) -> mk (JEQ r) lbl
+  JNE r (Lbl lbl) -> mk (JNE r) lbl
+  JGT r (Lbl lbl) -> mk (JGT r) lbl
+  JGE r (Lbl lbl) -> mk (JGE r) lbl
+  JLT r (Lbl lbl) -> mk (JLT r) lbl
+  JLE r (Lbl lbl) -> mk (JLE r) lbl
   LABEL _ -> error "Label instructions should not appear at this point"
   _ -> return instr
   where
+    mk :: (Value -> Instruction) -> String -> AsmState Instruction
+    mk f lbl = do cst <- replace lbl; return $ f cst
+
     replace :: String -> AsmState Value
     replace lbl = do
       (_, labels) <- get
