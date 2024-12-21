@@ -226,6 +226,7 @@ binop ty left op right =
         Op.Assign -> [STORE R5 (Reg R0)]
         Op.Subscript -> case ty of
           Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
+          Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
           _ -> error "Subscript on invalid value"
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
@@ -269,6 +270,7 @@ return_ mexpr = do
 
 exprAddress :: Expr -> State Context [Instruction]
 exprAddress e = case Expr.def e of
+  ED.Parenthese ex' -> exprAddress ex'
   ED.Id name -> getVarAddr name
   ED.UnopPre Op.MultOrIndir e' -> do
     insEx <- expr e'

@@ -153,7 +153,8 @@ isRightAssociative op = op `elem` rightAssociative
 
 unopAddressing :: [Op]
 unopAddressing =
-  [ MultOrIndir
+  [ MultOrIndir,
+    BitAndOrAddr
   ]
 
 isUnopAddressing :: Op -> Bool
