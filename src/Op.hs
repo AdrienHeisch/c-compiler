@@ -1,4 +1,4 @@
-module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr, isRightAssociative, isBinopAddressing, isUnopAddressing) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr, isRightAssociative, isBinopAddressing, isUnopAddressing, unaryPrecedence) where
 
 import Type (Type)
 import Type qualified (toStr)
@@ -170,6 +170,19 @@ binopAddressing =
 isBinopAddressing :: Op -> Bool
 isBinopAddressing op = op `elem` binopAddressing
 
+unaryPrecedence :: Op -> Int
+unaryPrecedence op = case op of
+  Increment -> 0
+  Decrement -> 0
+  AddOrPlus -> 1
+  SubOrNeg -> 1
+  Not -> 1
+  BitNot -> 1
+  MultOrIndir -> 1
+  BitAndOrAddr -> 1
+  Sizeof -> 1
+  _ -> error $ "Not a unary operator : " ++ show op
+
 precedence :: Op -> Int
 precedence op = case op of
   Subscript -> 0
@@ -205,7 +218,7 @@ precedence op = case op of
   BitXorAssign -> 11
   BitOrAssign -> 11
   Comma -> 12
-  _ -> 99
+  _ -> error $ "Not a binary operator : " ++ show op
 
 strIsOperator :: String -> Bool
 strIsOperator str = str `elem` allowed

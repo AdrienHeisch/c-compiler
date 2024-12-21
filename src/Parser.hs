@@ -426,8 +426,9 @@ expr tokens = case map Token.def tokens of
   TD.Op op : _
     | Op.isUnaryPre op ->
         case expr tks of
-          Expr (ED.Binop left bop right) _ ->
-            Expr (ED.Binop (Expr (ED.UnopPre op left) tokens) bop right) tokens
+          Expr (ED.Binop left bop right) _
+            | Op.precedence bop > Op.unaryPrecedence op ->
+                Expr (ED.Binop (Expr (ED.UnopPre op left) tokens) bop right) tokens
           ex -> Expr (ED.UnopPre op ex) tokens
   TD.DelimOpen Dl.Br : _ ->
     let listTks = collectInitializer tks
