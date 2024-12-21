@@ -3,6 +3,7 @@ module Linker (link) where
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
 import Data.List (find)
 import Instruction (Instruction (..), Program (..), Register (RR), Value (..))
+import Instruction qualified
 
 type AsmState = State (Int, [(String, Int)])
 
@@ -24,7 +25,7 @@ firstPass ins = case ins of
     newLabel lbl
     firstPass rest
   (instr : rest) -> do
-    modify $ pcAdd 1
+    modify $ pcAdd $ Instruction.len instr
     rest' <- firstPass rest
     return $ instr : rest'
 

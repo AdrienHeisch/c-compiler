@@ -1,4 +1,4 @@
-module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen, toOpCode) where
+module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen, len, toOpCode) where
 
 import Text.Printf (printf)
 import Utils (Display (display))
@@ -14,7 +14,7 @@ instance Utils.Display Program where
       go (pc :: Int) ins' = case ins' of
         [] -> ""
         LABEL lbl : rest -> show lbl ++ ":\n" ++ go pc rest
-        instr : rest -> "  " ++ printf "%04d" pc ++ "  " ++ show instr ++ "\n" ++ go (pc + 1) rest
+        instr : rest -> "  " ++ printf "%04d" pc ++ "  " ++ show instr ++ "\n" ++ go (pc + len instr) rest
 
 data Instruction
   = LABEL String -- TODO put this in a separate symbol type ?
@@ -142,3 +142,56 @@ toOpCode ins = case ins of
   EPRINT _ -> 0x2B
   DUMP -> 0x2C
   _ -> error "Not opcode"
+
+len :: (Num a) => Instruction -> a
+len ins = case ins of
+  NOP -> 3
+  HALT v -> 2 + valueLen v
+  SYCALL v -> 2 + valueLen v
+  CLEAR _ -> 3
+  SET _ v -> 2 + valueLen v
+  LOAD _ v -> 2 + valueLen v
+  STORE _ v -> 2 + valueLen v
+  SWAP _ _ -> 3
+  CMP _ v -> 2 + valueLen v
+  NEG _ -> 3
+  INC _ -> 3
+  DEC _ -> 3
+  ADD _ v -> 2 + valueLen v
+  SUB _ v -> 2 + valueLen v
+  MUL _ v -> 2 + valueLen v
+  DIV _ v -> 2 + valueLen v
+  MOD _ v -> 2 + valueLen v
+  NOT _ -> 3
+  AND _ v -> 2 + valueLen v
+  OR _ v -> 2 + valueLen v
+  XOR _ v -> 2 + valueLen v
+  NAND _ v -> 2 + valueLen v
+  NOR _ v -> 2 + valueLen v
+  NXOR _ v -> 2 + valueLen v
+  SHL _ v -> 2 + valueLen v
+  SHR _ v -> 2 + valueLen v
+  RCL _ v -> 2 + valueLen v
+  RCR _ v -> 2 + valueLen v
+  BSWAP _ -> 3
+  PUSH v -> 2 + valueLen v
+  DUP v -> 2 + valueLen v
+  POP _ -> 3
+  DROP -> 3
+  CALL v -> 2 + valueLen v
+  RET v -> 2 + valueLen v
+  JMP v -> 2 + valueLen v
+  JEQ _ v -> 2 + valueLen v
+  JNE _ v -> 2 + valueLen v
+  JGT _ v -> 2 + valueLen v
+  JGE _ v -> 2 + valueLen v
+  JLT _ v -> 2 + valueLen v
+  JLE _ v -> 2 + valueLen v
+  PRINT v -> 2 + valueLen v
+  EPRINT v -> 2 + valueLen v
+  DUMP -> 3
+  _ -> error "Not opcode"
+  where
+    valueLen (Reg _) = 1
+    valueLen (Cst _) = 8
+    valueLen (Lbl _) = 8
