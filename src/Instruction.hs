@@ -193,5 +193,5 @@ len ins = case ins of
   _ -> error "Not opcode"
   where
     valueLen (Reg _) = 1
-    valueLen (Cst _) = 8
-    valueLen (Lbl _) = 8
+    valueLen (Cst _) = regLen
+    valueLen (Lbl _) = regLen

@@ -106,12 +106,12 @@ sizeof ty = case ty of
   Float -> 4
   Double -> 8
   LDouble -> 8
-  Pointer _ -> 8
+  Pointer _ -> regLen
   Array ty' len' -> sizeof ty' * len'
   _ -> error "Unsized type"
 
 paddedSizeof :: Type -> Int
-paddedSizeof ty = trace (show $ (((sizeof ty - 1) `div` regLen) + 1) * regLen) $ (((sizeof ty - 1) `div` regLen) + 1) * regLen
+paddedSizeof ty = (((sizeof ty - 1) `div` regLen) + 1) * regLen
 
 mask :: Type -> Int
 mask ty = (1 `shiftL` regLen) - 1 .&. (1 `shiftL` sizeof ty) - 1
