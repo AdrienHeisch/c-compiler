@@ -4,7 +4,7 @@ import Control.Monad.State.Lazy (State, get, put)
 import Data.List (find)
 import Identifier (Id)
 import Identifier qualified as Id (toStr)
-import Type (Type, paddedSizeof)
+import Type (Type, sizeofWithPointer, paddedSizeof, isComplex)
 import Type qualified (toStr)
 import Utils (modifyFirst)
 
@@ -65,10 +65,12 @@ findVar doPrev name = do
     Nothing -> return Nothing
   where
     go :: [Var] -> Int -> Maybe (Int, Type)
-    go vars idx = case vars of
+    go vars addr = case vars of
       [] -> Nothing
-      (ty, name') : _ | name == name' -> Just (idx, ty)
-      (ty, _) : rest -> go rest (idx + paddedSizeof ty)
+      (ty, name') : _ | name == name' -> if isComplex ty
+        then Just (addr + paddedSizeof ty, ty)
+        else Just (addr, ty)
+      (ty, _) : rest -> go rest (addr + sizeofWithPointer ty)
 
 defineFunc :: (Type, Id) -> State Context ()
 defineFunc f = _addFunc f True
@@ -125,9 +127,6 @@ hasLabel :: String -> State Context Bool
 hasLabel lbl = do
   Context _ _ lbls _ _ <- get
   return $ lbl `elem` lbls
-
-byId :: Id -> Var -> Bool
-byId name = (== name) . (\var -> let (_, name') = var in name')
 
 byIdFunc :: Id -> Func -> Bool
 byIdFunc name = (== name) . (\var -> let (_, name', _) = var in name')

@@ -1,4 +1,4 @@
-module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask) where
+module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask, isComplex, sizeofWithPointer) where
 
 import Data.Bits (Bits (shiftL, (.&.)))
 import Data.List (intercalate)
@@ -112,6 +112,16 @@ sizeof ty = case ty of
 
 paddedSizeof :: Type -> Int
 paddedSizeof ty = (((sizeof ty - 1) `div` regLen) + 1) * regLen
+
+isComplex :: Type -> Bool
+isComplex ty = case ty of
+  Type.Array _ _ -> True
+  Type.ArrayNoHint _ -> True
+  Type.Struct _ _ -> True
+  _ -> False
+
+sizeofWithPointer :: Type -> Int
+sizeofWithPointer ty = paddedSizeof ty + if isComplex ty then regLen else 0
 
 mask :: Type -> Int
 mask ty = (1 `shiftL` regLen) - 1 .&. (1 `shiftL` sizeof ty) - 1

@@ -94,7 +94,7 @@ var ty name mexpr = do
     Just ex -> case Expr.def ex of
       ED.Initializer exs -> do
         ins <- initializer ty exs
-        return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
+        return $ SET R2 (Reg SP) : SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)] ++ [PUSH (Reg R2)] -- FIXME R2 is a hack
       _ -> do
         ins <- expr ex
         return $ ins ++ [PUSH (Reg R0)]
@@ -208,13 +208,12 @@ expr e = case Expr.def e of
   ED.UnopPre op ex -> unop op ex
   -- ED.UnopPost op ex -> []
   ED.Binop left op right -> do
-    ty <- evalOrThrow e
     case Op.getBinaryAssignOp op of
       Just innerOp -> do
-        insBinop <- binop ty left innerOp right
-        insAssign <- binop ty left Op.Assign right
+        insBinop <- binop left innerOp right
+        insAssign <- binop left Op.Assign right
         return $ insBinop ++ insAssign
-      Nothing -> binop ty left op right
+      Nothing -> binop left op right
   -- ED.Ternary ter_cond ter_then ter_else -> []
   ED.Call ex args -> call ex args
   ED.Parenthese ex -> expr ex
@@ -230,23 +229,31 @@ unop op ex =
    in case op of
         _ | Op.isUnopAddressing op -> do
           insAddr <- exprAddress ex
-          return $ insAddr ++ insOp
+          ty <- evalOrThrow ex
+          return $ insAddr ++ insOp ++ [AND R0 (Cst $ Type.mask ty)]
         _ | otherwise -> do
           insEx <- expr ex
           return $ insEx ++ insOp
 
-binop :: Type -> Expr -> Op -> Expr -> State Context [Instruction]
-binop ty left op right =
+binop :: Expr -> Op -> Expr -> State Context [Instruction]
+binop left op right = do
+  leftTy <- evalOrThrow left
   let insOp = case op of
-        Op.AddOrPlus -> [ADD R0 (Reg R4)]
-        Op.SubOrNeg -> [SUB R0 (Reg R4)]
+        Op.AddOrPlus -> case leftTy of
+          Type.Array ty' _ -> [MUL R4 (Cst $ sizeof ty'), ADD R0 (Reg R4)]
+          Type.Pointer ty' -> [MUL R4 (Cst $ sizeof ty'), ADD R0 (Reg R4)]
+          _ -> [ADD R0 (Reg R4)]
+        Op.SubOrNeg -> case leftTy of
+          Type.Array ty' _ -> [MUL R4 (Cst $ sizeof ty'), SUB R0 (Reg R4)]
+          Type.Pointer ty' -> [MUL R4 (Cst $ sizeof ty'), SUB R0 (Reg R4)]
+          _ -> [SUB R0 (Reg R4)]
         Op.MultOrIndir -> [MUL R0 (Reg R4)]
         Op.Div -> [DIV R0 (Reg R4)]
         Op.Mod -> [MOD R0 (Reg R4)]
         Op.Assign -> [STORE R5 (Reg R0)]
-        Op.Subscript -> case ty of
+        Op.Subscript -> case leftTy of
           Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5), AND R0 (Cst $ Type.mask ty')]
-          Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
+          Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5), AND R0 (Cst $ Type.mask ty')]
           _ -> error "Subscript on invalid value"
         Op.Member -> [ADD R1 (Reg R0), LOAD R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
@@ -258,7 +265,6 @@ binop ty left op right =
         _ | Op.isBinopMember op -> case Expr.def right of
           ED.Id name -> do
             insAddr <- exprAddress left
-            leftTy <- evalOrThrow left
             let (fieldTy, addr) = getMember name leftTy
             return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp ++ [AND R0 (Cst $ Type.mask fieldTy)]
           _ -> error $ "Invalid member " ++ display right
@@ -363,6 +369,17 @@ eval ex = case Expr.def ex of
   ED.FltLiteral (Constant ty _) -> return $ Left ty
   ED.StrLiteral (Constant ty _) -> return $ Left ty
   ED.Initializer _ -> return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
+  ED.UnopPre Op.BitAndOrAddr ex' -> do
+    ev <- eval ex'
+    case ev of
+      Left ty -> return . Left $ Type.Pointer ty
+      ret -> return ret
+  ED.UnopPre Op.MultOrIndir ex' -> do
+    ev <- eval ex'
+    case ev of
+      Left (Type.Pointer ty) -> return $ Left ty
+      Left ty -> return . Right $ "Not a pointer : " ++ show ty
+      ret -> return ret
   ED.UnopPre _ ex' -> eval ex' -- TODO probably wrong
   ED.UnopPost _ ex' -> eval ex' -- TODO probably wrong
   ED.Binop left Op.Member right -> do
