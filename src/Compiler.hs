@@ -278,15 +278,11 @@ call ex params = case Expr.def ex of
       return $ [PUSH (Reg LR), PUSH (Reg BP), SET BP (Reg SP)] ++ concat insParams ++ [CALL addr, SET R0 (Reg RR), POP BP, POP LR]
 
 return_ :: Maybe Expr -> State Context [Instruction]
-return_ mexpr = do
-  vars <- Context.getLocals
-  let frameSize = length vars
-      insFrame = replicate frameSize DROP
-  case mexpr of
-    Nothing -> return $ insFrame ++ [RET (Cst 0)]
+return_ mexpr = case mexpr of
+    Nothing -> return [SET SP (Reg BP), RET (Cst 0)]
     Just ex -> do
       insEx <- expr ex
-      return $ insEx ++ insFrame ++ [RET (Reg R0)]
+      return $ insEx ++ [SET SP (Reg BP), RET (Reg R0)]
 
 exprAddress :: Expr -> State Context [Instruction]
 exprAddress e = case Expr.def e of
