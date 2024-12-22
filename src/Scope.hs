@@ -1,4 +1,4 @@
-module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals) where
+module Scope (Scope (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals) where
 
 import Control.Monad.State.Lazy (State, get, put)
 import Data.List (find)
@@ -13,57 +13,57 @@ type Var = (Type, Id)
 
 type Func = (Type, Id, Bool)
 
-data Context = Context
+data Scope = Scope
   { funcs :: [Func],
     vars :: [Var],
     lbls :: [String],
     addr :: Int,
-    info :: Maybe Context
+    info :: Maybe Scope
   }
   deriving (Show)
 
-new :: Context
-new = Context [] [] [] 0 Nothing
+new :: Scope
+new = Scope [] [] [] 0 Nothing
 
-newFunction :: State Context ()
+newFunction :: State Scope ()
 newFunction = do
   prev <- get
-  put $ Context [] [] [] 0 (Just prev)
+  put $ Scope [] [] [] 0 (Just prev)
 
-newScope :: State Context ()
+newScope :: State Scope ()
 newScope = do
-  prev@(Context _ vars l _ _) <- get
-  put $ Context [] [] l (length vars) (Just prev)
+  prev@(Scope _ vars l _ _) <- get
+  put $ Scope [] [] l (length vars) (Just prev)
 
-addVars :: [(Type, Id)] -> State Context ()
+addVars :: [(Type, Id)] -> State Scope ()
 addVars vars = case vars of
   [] -> return ()
   (var : rest) -> addVar var >> addVars rest
 
-addVar :: (Type, Id) -> State Context ()
+addVar :: (Type, Id) -> State Scope ()
 addVar (ty, name) = do
   mvar <- findVar False name
   case mvar of
     Nothing -> do
-      Context f vars l a p <- get
-      put $ Context f (vars ++ [(ty, name)]) l a p
+      Scope f vars l a p <- get
+      put $ Scope f (vars ++ [(ty, name)]) l a p
     Just _ -> error $ "Redefinition of " ++ Id.toStr name
 
-getLocals :: State Context [(Int, Type)]
+getLocals :: State Scope [(Int, Type)]
 getLocals = do
-  Context _ vars _ _ _ <- get
+  Scope _ vars _ _ _ <- get
   return (zipWith (curry (\(idx, (ty, _)) -> (idx, ty))) [0 ..] vars)
 
-getVar :: Id -> State Context (Maybe (Value, Type))
+getVar :: Id -> State Scope (Maybe (Value, Type))
 getVar = findVar True
 
-findVar :: Bool -> Id -> State Context (Maybe (Value, Type))
+findVar :: Bool -> Id -> State Scope (Maybe (Value, Type))
 findVar doPrev name = do
-  Context _ vars _ addr _ <- get
+  Scope _ vars _ addr _ <- get
   case go vars 0 of
     Just (idx, ty) -> return $ Just (Cst (addr + idx), ty)
     Nothing -> do
-      mfunc <- Context.getFunc name
+      mfunc <- Scope.getFunc name
       case mfunc of
         Just (ty, Id nameStr, _) -> do
           return $ Just (Lbl nameStr, Type.Pointer ty)
@@ -80,13 +80,13 @@ findVar doPrev name = do
               else Just (addr, ty)
       (ty, _) : rest -> go rest (addr + sizeofWithPointer ty)
 
-defineFunc :: (Type, Id) -> State Context ()
+defineFunc :: (Type, Id) -> State Scope ()
 defineFunc f = _addFunc f True
 
-declareFunc :: (Type, Id) -> State Context ()
+declareFunc :: (Type, Id) -> State Scope ()
 declareFunc f = _addFunc f False
 
-_addFunc :: (Type, Id) -> Bool -> State Context () -- TODO error handling
+_addFunc :: (Type, Id) -> Bool -> State Scope () -- TODO error handling
 _addFunc (ty, name) doDefine = do
   mfunc <- findFunc False name
   case mfunc of
@@ -94,58 +94,58 @@ _addFunc (ty, name) doDefine = do
     Just (_, _, True) | doDefine -> error $ "Redefinition of " ++ Id.toStr name
     Just (_, _, True) -> return ()
     Just (_, _, False) | doDefine -> do
-      Context funcs v l a p <- get
+      Scope funcs v l a p <- get
       let funcs' = modifyFirst (byIdFunc name) (\(t, n, _) -> (t, n, True)) funcs
-      put $ Context funcs' v l a p
+      put $ Scope funcs' v l a p
       return ()
     _ -> do
-      Context funcs v l a p <- get
-      put $ Context (funcs ++ [(ty, name, doDefine)]) v l a p
+      Scope funcs v l a p <- get
+      put $ Scope (funcs ++ [(ty, name, doDefine)]) v l a p
       return ()
 
-getFunc :: Id -> State Context (Maybe Func)
+getFunc :: Id -> State Scope (Maybe Func)
 getFunc = findFunc True
 
-findFunc :: Bool -> Id -> State Context (Maybe Func)
+findFunc :: Bool -> Id -> State Scope (Maybe Func)
 findFunc doPrev name = do
-  Context funcs _ _ _ _ <- get
+  Scope funcs _ _ _ _ <- get
   case find (byIdFunc name) funcs of
     Just func -> return $ Just func
     Nothing | doPrev -> lookInPrev $ findFunc doPrev name
     Nothing -> return Nothing
 
-addLabel :: String -> State Context ()
+addLabel :: String -> State Scope ()
 addLabel lbl = do
   _ <- _addLabel $ Just lbl
   return ()
 
-makeAnonLabel :: State Context String
+makeAnonLabel :: State Scope String
 makeAnonLabel = _addLabel Nothing
 
-_addLabel :: Maybe String -> State Context String -- TODO error if already defined
+_addLabel :: Maybe String -> State Scope String -- TODO error if already defined
 _addLabel mlbl = do
-  Context f v lbls a p <- get
+  Scope f v lbls a p <- get
   let lbl = case mlbl of
         Just lbl' -> lbl'
         Nothing -> ".L" ++ show (length lbls)
-  put $ Context f v (lbls ++ [lbl]) a p
+  put $ Scope f v (lbls ++ [lbl]) a p
   return lbl
 
-hasLabel :: String -> State Context Bool
+hasLabel :: String -> State Scope Bool
 hasLabel lbl = do
-  Context _ _ lbls _ _ <- get
+  Scope _ _ lbls _ _ <- get
   return $ lbl `elem` lbls
 
 byIdFunc :: Id -> Func -> Bool
 byIdFunc name = (== name) . (\var -> let (_, name', _) = var in name')
 
-lookInPrev :: State Context (Maybe a) -> State Context (Maybe a)
+lookInPrev :: State Scope (Maybe a) -> State Scope (Maybe a)
 lookInPrev f = do
-  context@(Context _ _ _ _ mprev) <- get
+  scope@(Scope _ _ _ _ mprev) <- get
   case mprev of
     Nothing -> return Nothing
     Just prev -> do
       put prev
       var <- f
-      put context
+      put scope
       return var

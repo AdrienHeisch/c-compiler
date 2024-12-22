@@ -79,7 +79,7 @@ executable compiler
         Delimiter,
         Compiler,
         Instruction,
-        Context,
+        Scope,
         Assembler,
         Linker
 
