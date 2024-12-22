@@ -2,10 +2,11 @@ module Context (Context (..), new, newFunction, newScope, addVar, addVars, getVa
 
 import Control.Monad.State.Lazy (State, get, put)
 import Data.List (find)
-import Identifier (Id)
+import Identifier (Id (..))
 import Identifier qualified as Id (toStr)
-import Type (Type, sizeofWithPointer, paddedSizeof, isComplex)
-import Type qualified (toStr)
+import Instruction (Value (..))
+import Type (Type, isComplex, paddedSizeof, sizeofWithPointer)
+import Type qualified (Type (..), toStr)
 import Utils (modifyFirst)
 
 type Var = (Type, Id)
@@ -17,7 +18,7 @@ data Context = Context
     vars :: [Var],
     lbls :: [String],
     addr :: Int,
-    prev :: Maybe Context
+    info :: Maybe Context
   }
   deriving (Show)
 
@@ -53,23 +54,30 @@ getLocals = do
   Context _ vars _ _ _ <- get
   return (zipWith (curry (\(idx, (ty, _)) -> (idx, ty))) [0 ..] vars)
 
-getVar :: Id -> State Context (Maybe (Int, Type))
+getVar :: Id -> State Context (Maybe (Value, Type))
 getVar = findVar True
 
-findVar :: Bool -> Id -> State Context (Maybe (Int, Type))
+findVar :: Bool -> Id -> State Context (Maybe (Value, Type))
 findVar doPrev name = do
   Context _ vars _ addr _ <- get
   case go vars 0 of
-    Just (idx, ty) -> return $ Just (addr + idx, ty)
-    Nothing | doPrev -> lookInPrev $ findVar doPrev name
-    Nothing -> return Nothing
+    Just (idx, ty) -> return $ Just (Cst (addr + idx), ty)
+    Nothing -> do
+      mfunc <- Context.getFunc name
+      case mfunc of
+        Just (ty, Id nameStr, _) -> do
+          return $ Just (Lbl nameStr, Type.Pointer ty)
+        Nothing | doPrev -> lookInPrev $ findVar doPrev name
+        Nothing -> return Nothing
   where
     go :: [Var] -> Int -> Maybe (Int, Type)
     go vars addr = case vars of
       [] -> Nothing
-      (ty, name') : _ | name == name' -> if isComplex ty
-        then Just (addr + paddedSizeof ty, ty)
-        else Just (addr, ty)
+      (ty, name') : _
+        | name == name' ->
+            if isComplex ty
+              then Just (addr + paddedSizeof ty, ty)
+              else Just (addr, ty)
       (ty, _) : rest -> go rest (addr + sizeofWithPointer ty)
 
 defineFunc :: (Type, Id) -> State Context ()

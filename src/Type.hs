@@ -91,6 +91,7 @@ isFloating ty = ty `elem` floating
 
 sizeof :: Type -> Int
 sizeof ty = case ty of
+  Void -> 0
   Bool -> 1
   Char -> 1
   UChar -> 1

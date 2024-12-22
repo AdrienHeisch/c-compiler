@@ -13,7 +13,7 @@ import Expr qualified (Expr (..))
 import Expr qualified as ED (ExprDef (..))
 import Expr qualified as IK (InitializerKind (..))
 import Identifier (Id (..))
-import Instruction (Instruction (..), Program (..), Register (..), Value (..))
+import Instruction (Instruction (..), Program (..), Register (..), Value (..), regLen)
 import Op (Op)
 import Op qualified
 import Statement (Statement)
@@ -192,33 +192,38 @@ label (Id lbl) st = do
     else error "Label does not exist"
 
 expr :: Expr -> State Context [Instruction]
-expr e = case Expr.def e of
-  ED.Id name -> do
-    mvar <- Context.getVar name
-    case mvar of
-      Just (_, _) -> do
-        insVar <- getVarAddr name
-        return $ insVar ++ [LOAD R0 (Reg R1)]
-      Nothing -> error $ "Undefined identifier : " ++ show name
-  ED.IntLiteral (Constant Type.Int int) -> do
-    return [SET R0 (Cst int)]
-  -- ED.FltLiteral flt -> []
-  -- ED.StrLiteral str -> []
-  ED.Initializer _ -> error $ "Can't evaluate initializer : " ++ display e
-  ED.UnopPre op ex -> unop op ex
-  -- ED.UnopPost op ex -> []
-  ED.Binop left op right -> do
-    case Op.getBinaryAssignOp op of
-      Just innerOp -> do
-        insBinop <- binop left innerOp right
-        insAssign <- binop left Op.Assign right
-        return $ insBinop ++ insAssign
-      Nothing -> binop left op right
-  -- ED.Ternary ter_cond ter_then ter_else -> []
-  ED.Call ex args -> call ex args
-  ED.Parenthese ex -> expr ex
-  ED.Invalid str -> error $ "Invalid expression : " ++ str
-  _ -> error $ "Expression not implemented yet : " ++ display e
+expr e = do
+  ins <- case Expr.def e of
+    ED.Id name -> do
+      insVar <- getVarAddr name
+      return $ insVar ++ [LOAD R0 (Reg R1)]
+    ED.IntLiteral (Constant Type.Int int) -> do
+      return [SET R0 (Cst int)]
+    -- ED.FltLiteral flt -> []
+    -- ED.StrLiteral str -> []
+    ED.Initializer _ -> error $ "Can't evaluate initializer : " ++ display e
+    ED.UnopPre op ex -> unop op ex
+    -- ED.UnopPost op ex -> []
+    ED.Binop left op right -> do
+      case Op.getBinaryAssignOp op of
+        Just innerOp -> do
+          insBinop <- binop left innerOp right
+          insAssign <- binop left Op.Assign right
+          return $ insBinop ++ insAssign
+        Nothing -> binop left op right
+    -- ED.Ternary ter_cond ter_then ter_else -> []
+    ED.Call ex args -> call ex args
+    ED.Parenthese ex -> expr ex
+    ED.Invalid str -> error $ "Invalid expression : " ++ str
+    _ -> error $ "Expression not implemented yet : " ++ display e
+  withMask ins
+  where
+    withMask ins = do
+      ty <- evalOrThrow e
+      let size = sizeof ty
+      if 0 < size && size < regLen
+        then return $ ins ++ [AND R0 (Cst $ Type.mask ty)]
+        else return ins
 
 unop :: Op -> Expr -> State Context [Instruction]
 unop op ex =
@@ -229,8 +234,7 @@ unop op ex =
    in case op of
         _ | Op.isUnopAddressing op -> do
           insAddr <- exprAddress ex
-          ty <- evalOrThrow ex
-          return $ insAddr ++ insOp ++ [AND R0 (Cst $ Type.mask ty)]
+          return $ insAddr ++ insOp
         _ | otherwise -> do
           insEx <- expr ex
           return $ insEx ++ insOp
@@ -252,8 +256,8 @@ binop left op right = do
         Op.Mod -> [MOD R0 (Reg R4)]
         Op.Assign -> [STORE R5 (Reg R0)]
         Op.Subscript -> case leftTy of
-          Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5), AND R0 (Cst $ Type.mask ty')]
-          Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5), AND R0 (Cst $ Type.mask ty')]
+          Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
+          Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
           _ -> error "Subscript on invalid value"
         Op.Member -> [ADD R1 (Reg R0), LOAD R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
@@ -265,8 +269,8 @@ binop left op right = do
         _ | Op.isBinopMember op -> case Expr.def right of
           ED.Id name -> do
             insAddr <- exprAddress left
-            let (fieldTy, addr) = getMember name leftTy
-            return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp ++ [AND R0 (Cst $ Type.mask fieldTy)]
+            let (_, addr) = getMember name leftTy
+            return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp
           _ -> error $ "Invalid member " ++ display right
         _ | otherwise -> do
           insL <- expr left
@@ -328,14 +332,9 @@ getVarAddr :: Id -> State Context [Instruction]
 getVarAddr name = do
   mvar <- Context.getVar name
   case mvar of
-    Just (idx, _) ->
-      return [SET R1 (Reg BP), ADD R1 (Cst idx)]
-    Nothing -> do
-      mfunc <- Context.getFunc name
-      case mfunc of
-        Just (_, Id nameStr, _) -> do
-          return [SET R1 (Lbl nameStr)]
-        Nothing -> error $ "Undefined identifier : " ++ show name
+    Just (addr, _) ->
+      return [SET R1 (Reg BP), ADD R1 addr]
+    Nothing -> error $ "Undefined identifier : " ++ show name
 
 getMember :: Id -> Type -> (Type, Int)
 getMember name ty = case ty of
@@ -364,7 +363,7 @@ eval ex = case Expr.def ex of
     mty <- Context.getVar name
     case mty of
       Just (_, ty) -> return $ Left ty
-      Nothing -> eval ex
+      Nothing -> error $ "Undefined identifier : " ++ show name
   ED.IntLiteral (Constant ty _) -> return $ Left ty
   ED.FltLiteral (Constant ty _) -> return $ Left ty
   ED.StrLiteral (Constant ty _) -> return $ Left ty
