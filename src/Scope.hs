@@ -18,22 +18,27 @@ data Scope = Scope
     vars :: [Var],
     lbls :: [String],
     addr :: Int,
-    info :: Maybe Scope
+    ctxt :: Context
   }
   deriving (Show)
 
+data Context
+  = Local {prev :: Scope}
+  | Global
+  deriving (Show)
+
 new :: Scope
-new = Scope [] [] [] 0 Nothing
+new = Scope [] [] [] 0 Global
 
 newFunction :: State Scope ()
 newFunction = do
-  prev <- get
-  put $ Scope [] [] [] 0 (Just prev)
+  ctxt <- get
+  put $ Scope [] [] [] 0 (Local ctxt)
 
 newScope :: State Scope ()
 newScope = do
-  prev@(Scope _ vars l _ _) <- get
-  put $ Scope [] [] l (length vars) (Just prev)
+  ctxt@(Scope _ vars l _ _) <- get
+  put $ Scope [] [] l (length vars) (Local ctxt)
 
 addVars :: [(Type, Id)] -> State Scope ()
 addVars vars = case vars of
@@ -143,9 +148,9 @@ lookInPrev :: State Scope (Maybe a) -> State Scope (Maybe a)
 lookInPrev f = do
   scope@(Scope _ _ _ _ mprev) <- get
   case mprev of
-    Nothing -> return Nothing
-    Just prev -> do
-      put prev
+    Global -> return Nothing
+    Local {prev = ctxt} -> do
+      put ctxt
       var <- f
       put scope
       return var
