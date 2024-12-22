@@ -2,7 +2,6 @@ module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, 
 
 import Data.Bits (Bits (shiftL, (.&.)))
 import Data.List (intercalate)
-import Debug.Trace (trace)
 import Identifier (Id)
 import Identifier qualified
 import Instruction (regLen)
@@ -108,7 +107,8 @@ sizeof ty = case ty of
   LDouble -> 8
   Pointer _ -> regLen
   Array ty' len' -> sizeof ty' * len'
-  _ -> error "Unsized type"
+  Struct _ fields -> sum $ map (sizeof . fst) fields
+  _ -> error $ "Unsized type " ++ show ty
 
 paddedSizeof :: Type -> Int
 paddedSizeof ty = (((sizeof ty - 1) `div` regLen) + 1) * regLen

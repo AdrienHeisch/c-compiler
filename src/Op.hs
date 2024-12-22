@@ -1,4 +1,4 @@
-module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr, isRightAssociative, isBinopAddressing, isUnopAddressing, unaryPrecedence) where
+module Op (Op (..), isUnaryPre, isUnaryPost, isBinary, isTernary, isBinaryAssign, getBinaryAssignOp, precedence, strIsOperator, toStr, isRightAssociative, isBinopAddressing, isUnopAddressing, unaryPrecedence, isBinopMember) where
 
 import Type (Type)
 import Type qualified (toStr)
@@ -163,13 +163,20 @@ isUnopAddressing op = op `elem` unopAddressing
 binopAddressing :: [Op]
 binopAddressing =
   [ Assign,
-    Member,
-    MemberPtr,
     Subscript
   ]
 
 isBinopAddressing :: Op -> Bool
 isBinopAddressing op = op `elem` binopAddressing
+
+binopMember :: [Op]
+binopMember =
+  [ Member,
+    MemberPtr
+  ]
+
+isBinopMember :: Op -> Bool
+isBinopMember op = op `elem` binopMember
 
 unaryPrecedence :: Op -> Int
 unaryPrecedence op = case op of

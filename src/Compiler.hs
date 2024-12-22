@@ -248,12 +248,20 @@ binop ty left op right =
           Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5), AND R0 (Cst $ Type.mask ty')]
           Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
           _ -> error "Subscript on invalid value"
+        Op.Member -> [ADD R1 (Reg R0), LOAD R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
         _ | Op.isBinopAddressing op -> do
           insAddr <- exprAddress left
           insVal <- expr right
           return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
+        _ | Op.isBinopMember op -> case Expr.def right of
+          ED.Id name -> do
+            insAddr <- exprAddress left
+            leftTy <- evalOrThrow left
+            let (fieldTy, addr) = getMember name leftTy
+            return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp ++ [AND R0 (Cst $ Type.mask fieldTy)]
+          _ -> error $ "Invalid member " ++ display right
         _ | otherwise -> do
           insL <- expr left
           insR <- expr right
@@ -295,10 +303,19 @@ exprAddress e = case Expr.def e of
     let ty' = case ty of
           Type.Array ty'' _ -> ty''
           Type.ArrayNoHint ty'' -> ty''
+          Type.Pointer ty'' -> ty''
           _ -> error "Subscript on invalid value"
     insAddr <- exprAddress left
     insVal <- expr right
     return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5, MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), SET R1 (Reg R5)]
+  ED.Binop left Op.Member right -> do
+    leftTy <- evalOrThrow left
+    case Expr.def right of
+      ED.Id name -> do
+        insAddr <- exprAddress left
+        let (_, addr) = getMember name leftTy
+        return $ insAddr ++ [ADD R1 (Cst addr)]
+      _ -> error $ "Invalid member " ++ display right
   _ -> error $ "Can't get address of : " ++ display e
 
 getVarAddr :: Id -> State Context [Instruction]
@@ -313,6 +330,19 @@ getVarAddr name = do
         Just (_, Id nameStr, _) -> do
           return [SET R1 (Lbl nameStr)]
         Nothing -> error $ "Undefined identifier : " ++ show name
+
+getMember :: Id -> Type -> (Type, Int)
+getMember name ty = case ty of
+  Type.Struct _ initFields -> go 0 initFields
+  _ -> error $ "Type has no fields : " ++ show ty
+  where
+    go :: Int -> [(Type, Id)] -> (Type, Int)
+    go addr fields = case fields of
+      [] -> error $ "Member not found " ++ show name ++ " in " ++ show ty
+      (ty', name') : rest ->
+        if name' == name
+          then (ty', addr)
+          else go (addr + sizeof ty') rest
 
 collectLabels :: [Statement] -> State Context ()
 collectLabels sts = case map Statement.def sts of
@@ -335,6 +365,15 @@ eval ex = case Expr.def ex of
   ED.Initializer _ -> return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
   ED.UnopPre _ ex' -> eval ex' -- TODO probably wrong
   ED.UnopPost _ ex' -> eval ex' -- TODO probably wrong
+  ED.Binop left Op.Member right -> do
+    ev <- eval left
+    case ev of -- TODO probably wrong
+      Left ty -> case Expr.def right of
+        ED.Id field -> do
+          let (ty', _) = getMember field ty
+           in return $ Left ty'
+        _ -> error $ "Invalid member " ++ display right
+      ret -> return ret
   ED.Binop left _ right -> do
     ev <- eval left
     case ev of -- TODO probably wrong
