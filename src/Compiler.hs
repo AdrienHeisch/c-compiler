@@ -6,7 +6,7 @@ import Constant (Constant (Constant))
 import Control.Monad.State.Lazy (State, evalState, get, put)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
-import Expr (Expr, InitializerKind)
+import Expr (Expr (Expr), InitializerKind)
 import Expr qualified (Expr (..))
 import Expr qualified as ED (ExprDef (..))
 import Expr qualified as IK (InitializerKind (..))
@@ -91,13 +91,15 @@ var ty name mexpr = do
   !_ <- Scope.addVar (ty, name)
   case mexpr of
     Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
-    Just ex -> case Expr.def ex of
-      ED.Initializer exs -> do
-        ins <- initializer ty exs
-        return $ SET R2 (Reg SP) : SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)] ++ [PUSH (Reg R2)] -- FIXME R2 is a hack
-      _ -> do
-        ins <- expr ex
-        return $ ins ++ [PUSH (Reg R0)]
+    Just ex -> do
+      checkAssign ty ex $ do
+        case Expr.def ex of
+          ED.Initializer exs -> do
+            ins <- initializer ty exs
+            return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
+          _ -> do
+            ins <- expr ex
+            return $ ins ++ [PUSH (Reg R0)]
 
 initializer :: Type -> [(InitializerKind, Expr)] -> State Scope [Instruction]
 initializer ty = go 0
@@ -193,10 +195,13 @@ label (Id lbl) st = do
 
 expr :: Expr -> State Scope [Instruction]
 expr e = do
+  ty <- evalOrThrow e
   ins <- case Expr.def e of
     ED.Id name -> do
       insVar <- getVarAddr name
-      return $ insVar ++ [LOAD R0 (Reg R1)]
+      if Type.isComplex ty
+        then return $ insVar ++ [SET R0 (Reg R1)]
+        else return $ insVar ++ [LOAD R0 (Reg R1)]
     ED.IntLiteral (Constant Type.Int int) -> do
       return [SET R0 (Cst int)]
     -- ED.FltLiteral flt -> []
@@ -232,7 +237,7 @@ unop op ex =
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
         _ | Op.isUnopAddressing op -> do
-          insAddr <- exprAddress ex
+          insAddr <- expr ex
           return $ insAddr ++ insOp
         _ | otherwise -> do
           insEx <- expr ex
@@ -255,19 +260,20 @@ binop left op right = do
         Op.Mod -> [MOD R0 (Reg R4)]
         Op.Assign -> [STORE R5 (Reg R0)]
         Op.Subscript -> case leftTy of
-          Type.Array ty' _ -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
-          Type.Pointer ty' -> [MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), LOAD R0 (Reg R5)]
+          Type.Array ty' _ -> [MUL R4 (Cst $ sizeof ty'), ADD R4 (Reg R0), LOAD R0 (Reg R4)]
+          Type.Pointer ty' -> [MUL R4 (Cst $ sizeof ty'), ADD R4 (Reg R0), LOAD R0 (Reg R4)]
           _ -> error "Subscript on invalid value"
         Op.Member -> [ADD R1 (Reg R0), LOAD R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
         _ | Op.isBinopAddressing op -> do
-          insAddr <- exprAddress left
-          insVal <- expr right
-          return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
+          checkAssign leftTy right $ do
+            insAddr <- lvalue left
+            insVal <- expr right
+            return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
         _ | Op.isBinopMember op -> case Expr.def right of
           ED.Id name -> do
-            insAddr <- exprAddress left
+            insAddr <- expr left
             let (_, addr) = getMember name leftTy
             return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp
           _ -> error $ "Invalid member " ++ display right
@@ -276,7 +282,7 @@ binop left op right = do
           insR <- expr right
           return $ insR ++ [PUSH (Reg R0)] ++ insL ++ [POP R4] ++ insOp
 
-call :: Expr -> [Expr] -> State Scope [Instruction]
+call :: Expr -> [Expr] -> State Scope [Instruction] -- TODO type checking
 call ex params = case Expr.def ex of
   ED.Parenthese ex' -> call ex' params
   ED.Id name -> do
@@ -300,34 +306,28 @@ return_ mexpr = case mexpr of
     insEx <- expr ex
     return $ insEx ++ [SET SP (Reg BP), RET (Reg R0)]
 
-exprAddress :: Expr -> State Scope [Instruction]
-exprAddress e = case Expr.def e of
-  ED.Parenthese ex' -> exprAddress ex'
+lvalue :: Expr -> State Scope [Instruction]
+lvalue e = case Expr.def e of
   ED.Id name -> getVarAddr name
   ED.UnopPre Op.MultOrIndir e' -> do
-    insEx <- expr e'
-    return $ insEx ++ [SET R1 (Reg R0)]
+    ins <- expr e'
+    return $ ins ++ [SET R1 (Reg R0)]
   ED.Binop left Op.Subscript right -> do
     ty <- evalOrThrow left
-    let ty' = case ty of
-          Type.Array ty'' _ -> ty''
-          Type.ArrayNoHint ty'' -> ty''
-          Type.Pointer ty'' -> ty''
-          _ -> error "Subscript on invalid value"
-    insAddr <- exprAddress left
+    insAddr <- expr left
     insVal <- expr right
-    return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5, MUL R0 (Cst $ sizeof ty'), ADD R5 (Reg R0), SET R1 (Reg R5)]
+    return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5, MUL R0 (Cst $ sizeof ty), ADD R5 (Reg R0), SET R1 (Reg R5)]
   ED.Binop left Op.Member right -> do
     leftTy <- evalOrThrow left
     case Expr.def right of
       ED.Id name -> do
-        insAddr <- exprAddress left
+        insAddr <- lvalue left
         let (_, addr) = getMember name leftTy
         return $ insAddr ++ [ADD R1 (Cst addr)]
       _ -> error $ "Invalid member " ++ display right
   ED.Parenthese ex' -> lvalue ex'
   ED.Ambiguous left right -> lvalue $ solveAmbiguous left right
-  _ -> error $ "Can't get address of : " ++ display e
+  _ -> error $ "Not an lvalue : " ++ display e
 
 getVarAddr :: Id -> State Scope [Instruction]
 getVarAddr name = do
@@ -368,7 +368,11 @@ eval ex = case Expr.def ex of
   ED.IntLiteral (Constant ty _) -> return $ Left ty
   ED.FltLiteral (Constant ty _) -> return $ Left ty
   ED.StrLiteral (Constant ty _) -> return $ Left ty
-  ED.Initializer _ -> return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
+  ED.Initializer _ -> return $ Left Type.Infer {- case exs of -- return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
+                                               [] -> return $ Left Type.Void
+                                               (_, ex') : _ -> do
+                                                 ty <- evalOrThrow ex'
+                                                 return $ Left (Type.Array ty (length exs)) -}
   ED.UnopPre Op.BitAndOrAddr ex' -> do
     ev <- eval ex'
     case ev of
@@ -378,6 +382,7 @@ eval ex = case Expr.def ex of
     ev <- eval ex'
     case ev of
       Left (Type.Pointer ty) -> return $ Left ty
+      Left (Type.Array ty _) -> return $ Left ty
       Left ty -> return . Right $ "Not a pointer : " ++ show ty
       ret -> return ret
   ED.UnopPre _ ex' -> eval ex' -- TODO probably wrong
@@ -390,6 +395,13 @@ eval ex = case Expr.def ex of
           let (ty', _) = getMember field ty
            in return $ Left ty'
         _ -> error $ "Invalid member " ++ display right
+      ret -> return ret
+  ED.Binop left Op.Subscript _ -> do
+    ev <- eval left
+    case ev of -- TODO probably wrong
+      Left (Type.Array ty _) -> return $ Left ty
+      Left (Type.Pointer ty) -> return $ Left ty
+      Left _ -> error $ "Can't perform subscript on " ++ display left
       ret -> return ret
   ED.Binop left _ right -> do
     ev <- eval left
@@ -420,6 +432,16 @@ evalOrThrow :: Expr -> State Scope Type
 evalOrThrow ex = do
   ev <- eval ex
   return $ case ev of Left ty -> ty; Right err -> error err
+
+checkAssign :: Type -> Expr -> State Scope a -> State Scope a
+checkAssign leftTy right f = do
+  rightTy <- evalOrThrow right
+  let ret
+        | leftTy == rightTy = f
+        | rightTy == Type.Infer = f
+        | Type.canCast rightTy leftTy = f
+        | otherwise = error $ "Can't assign " ++ Type.toStr rightTy ++ " to " ++ Type.toStr leftTy
+   in ret
 
 solveAmbiguous :: Expr -> Expr -> Expr
 solveAmbiguous left right = case (Expr.def left, Expr.def right) of

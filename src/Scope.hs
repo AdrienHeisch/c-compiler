@@ -5,7 +5,7 @@ import Data.List (find)
 import Identifier (Id (..))
 import Identifier qualified as Id (toStr)
 import Instruction (Value (..))
-import Type (Type, isComplex, paddedSizeof, sizeofWithPointer)
+import Type (Type, paddedSizeof)
 import Type qualified (Type (..), toStr)
 import Utils (modifyFirst)
 
@@ -54,10 +54,10 @@ addVar (ty, name) = do
       put $ Scope f (vars ++ [(ty, name)]) l a p
     Just _ -> error $ "Redefinition of " ++ Id.toStr name
 
-getLocals :: State Scope [(Int, Type)]
+getLocals :: State Scope [Var]
 getLocals = do
   Scope _ vars _ _ _ <- get
-  return (zipWith (curry (\(idx, (ty, _)) -> (idx, ty))) [0 ..] vars)
+  return vars
 
 getVar :: Id -> State Scope (Maybe (Value, Type))
 getVar = findVar True
@@ -79,11 +79,8 @@ findVar doPrev name = do
     go vars addr = case vars of
       [] -> Nothing
       (ty, name') : _
-        | name == name' ->
-            if isComplex ty
-              then Just (addr + paddedSizeof ty, ty)
-              else Just (addr, ty)
-      (ty, _) : rest -> go rest (addr + sizeofWithPointer ty)
+        | name == name' -> Just (addr, ty)
+      (ty, _) : rest -> go rest (addr + paddedSizeof ty)
 
 defineFunc :: (Type, Id) -> State Scope ()
 defineFunc f = _addFunc f True

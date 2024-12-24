@@ -136,6 +136,13 @@ mask ty
       8 -> 0xFFFFFFFF
       _ -> error $ "Invalid type size: " ++ show ty
 
+canCast :: Type -> Type -> Bool
+canCast from to
+  | isInteger from && isInteger to && sizeof from < sizeof to = True
+  | otherwise = case (from, to) of
+      (Array fromTy _, Pointer toTy) | fromTy == toTy -> True
+      _ -> False
+
 toStr :: Type -> String
 toStr ty = case ty of
   Infer -> error "Infer type should not be stringified"
@@ -164,5 +171,6 @@ toStr ty = case ty of
   Enum (Just name) ty' -> "enum " ++ Identifier.toStr name ++ " : " ++ toStr ty'
   Typedef name -> Identifier.toStr name
   Function ret tys -> toStr ret ++ "*(" ++ intercalate ", " (map toStr tys) ++ ")"
-  Pointer (Function ret tys) -> toStr ret ++ "(*)(" ++ intercalate ", " (map toStr tys) ++ ")"
+  Pointer (Function ret tys) -> toStr ret ++ " (*)(" ++ intercalate ", " (map toStr tys) ++ ")"
+  Pointer (Array ty' arrlen) -> toStr ty' ++ " (*)[" ++ show arrlen ++ "]"
   Pointer ty' -> toStr ty' ++ " *"
