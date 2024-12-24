@@ -1,6 +1,5 @@
-module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask, isComplex, sizeofWithPointer) where
+module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask, isComplex, sizeofWithPointer, canCast) where
 
-import Data.Bits (Bits (shiftL, (.&.)))
 import Data.List (intercalate)
 import Identifier (Id)
 import Identifier qualified
@@ -119,13 +118,23 @@ isComplex ty = case ty of
   Type.Array _ _ -> True
   Type.ArrayNoHint _ -> True
   Type.Struct _ _ -> True
+  Type.Union _ _ -> True
   _ -> False
 
 sizeofWithPointer :: Type -> Int
 sizeofWithPointer ty = paddedSizeof ty + if isComplex ty then regLen else 0
 
 mask :: Type -> Int
-mask ty = (1 `shiftL` regLen) - 1 .&. (1 `shiftL` sizeof ty) - 1
+-- FIXME 64 bit system
+mask ty
+  | isComplex ty = 0xFFFFFFFF
+  | otherwise = case sizeof ty of
+      0 -> 0
+      1 -> 0xFF
+      2 -> 0xFFFF
+      4 -> 0xFFFFFFFF
+      8 -> 0xFFFFFFFF
+      _ -> error $ "Invalid type size: " ++ show ty
 
 toStr :: Type -> String
 toStr ty = case ty of

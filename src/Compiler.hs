@@ -20,7 +20,7 @@ import Statement (Statement)
 import Statement qualified
 import Statement qualified as SD (StatementDef (..))
 import Type (Type, paddedSizeof, sizeof)
-import Type qualified (Type (..), mask)
+import Type qualified
 import Utils (Display (display), maybeListToList)
 
 compile :: [Statement] -> Program

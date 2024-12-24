@@ -162,8 +162,7 @@ isUnopAddressing op = op `elem` unopAddressing
 
 binopAddressing :: [Op]
 binopAddressing =
-  [ Assign,
-    Subscript
+  [ Assign
   ]
 
 isBinopAddressing :: Op -> Bool
