@@ -34,6 +34,9 @@ modifyFirst predicate transformer (x : xs)
   | predicate x = transformer x : xs
   | otherwise = x : modifyFirst predicate transformer xs
 
+unreachable :: a
+unreachable = error "Unreachable code, or so I thought"
+
 class Display a where
   display :: a -> String
 

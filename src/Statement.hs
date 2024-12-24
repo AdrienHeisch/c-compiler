@@ -1,4 +1,4 @@
-module Statement (Statement (..), StatementDef (..), isTopLevel, errs) where
+module Statement (Statement (..), StatementDef (..), StorageClass (..), isTopLevel, errs) where
 
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (catMaybes, mapMaybe)
@@ -27,7 +27,7 @@ data StatementDef
   | Enum (Maybe Id) Type (Maybe [(Id, Maybe Expr)]) -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
   | Typedef Type Id
   | Expr Expr
-  | Var (NonEmpty (Type, Id, Maybe Expr))
+  | Var (NonEmpty (StorageClass, Type, Id, Maybe Expr))
   | Block [Statement]
   | If {cond :: Expr, then_ :: Statement, else_ :: Maybe Statement}
   | Switch {eval :: Expr, body :: Statement}
@@ -75,7 +75,7 @@ instance Display StatementDef where
     Labeled name st -> "Label " ++ Id.toStr name ++ " " ++ display st ++ " )"
     _ -> show statement
     where
-      displayVar (ty, name, e) = "(" ++ unwords [show ty, show name, display e] ++ ")"
+      displayVar (_, ty, name, e) = "(" ++ unwords [show ty, show name, display e] ++ ")"
 
       displayVariants [] = ""
       displayVariants [(name, ex)] = unwords [show name, display ex]
@@ -88,7 +88,7 @@ errs = concatMap err
     err statement = case def statement of
       FuncDef _ _ _ sts -> Statement.errs sts
       Expr e -> Expr.errs [e]
-      Var ((_, _, ex) :| vars) -> Expr.errs (catMaybes [ex]) ++ Expr.errs (mapMaybe (\(_, _, e) -> e) vars)
+      Var ((_, _, _, ex) :| vars) -> Expr.errs (catMaybes [ex]) ++ Expr.errs (mapMaybe (\(_, _, _, e) -> e) vars)
       If e st0 st1 -> Expr.errs [e] ++ errs (catMaybes [Just st0, st1])
       Switch e st -> Expr.errs [e] ++ errs [st]
       While e st -> Expr.errs [e] ++ errs [st]
@@ -98,3 +98,9 @@ errs = concatMap err
       Block block -> concatMap err block
       Invalid str -> [str ++ " at " ++ show (Token.foldCrs $ tks statement)]
       _ -> []
+
+data StorageClass
+  = Infer
+  | Auto
+  | Static
+  deriving (Show)

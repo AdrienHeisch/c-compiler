@@ -13,8 +13,9 @@ import Expr qualified as IK (InitializerKind (..))
 import Identifier (Id)
 import Op (Op)
 import Op qualified
-import Statement (Statement (Statement), StatementDef)
+import Statement (Statement (Statement), StatementDef, StorageClass)
 import Statement qualified (errs, isTopLevel)
+import Statement qualified as SC (StorageClass (..))
 import Statement qualified as SD (StatementDef (..))
 import Statement qualified as St (Statement (..))
 import Token (Token (Token), collectUntil, collectUntilDelimiter, collectUntilWithDelimiters, parseListWithInner)
@@ -137,11 +138,15 @@ statement = do
         makeWith (func ty name) 3
     TD.Type ty
       : _ ->
-        makeWith (declaration ty) 1
+        makeWith (declaration SC.Infer ty) 1
+    TD.Static -- TODO storage classes with typedefs
+      : TD.Type ty
+      : _ ->
+        makeWith (declaration SC.Static ty) 2
     TD.Id tyid
       : TD.Id _
       : _ ->
-        makeWith (declaration (Ty.Typedef tyid)) 1
+        makeWith (declaration SC.Infer (Ty.Typedef tyid)) 1
     _ ->
       makeExpr
   where
@@ -163,15 +168,15 @@ statement = do
       let ex = expr tokens
       return $ Statement (SD.Expr ex) (Expr.tks ex)
 
-declaration :: Type -> [Token] -> State [Token] Statement
-declaration spec taken = do
+declaration :: StorageClass -> Type -> [Token] -> State [Token] Statement
+declaration sc spec taken = do
   (mdecls, tokens) <- go
   case mdecls of
     Left [] -> return $ Statement (SD.Invalid "Empty declaration") (taken ++ tokens)
     Left (decl : decls) -> return $ Statement (SD.Var (decl :| decls)) (taken ++ tokens)
     Right err -> return $ Statement (SD.Invalid err) (taken ++ tokens)
   where
-    go :: State [Token] (Either [(Type, Id, Maybe Expr)] String, [Token])
+    go :: State [Token] (Either [(StorageClass, Type, Id, Maybe Expr)] String, [Token])
     go = do
       (res, tks) <- makeType spec
       case res of
@@ -186,10 +191,10 @@ declaration spec taken = do
               (mdecls, dTks) <- go
               case mdecls of
                 Right err -> return (Right err, tks)
-                Left decls -> return (Left ((ty, name, ex) : decls), tks ++ dTks)
+                Left decls -> return (Left ((sc, ty, name, ex) : decls), tks ++ dTks)
             TD.Semicolon : _ -> do
               modify $ drop 1
-              return (Left [(ty, name, ex)], tks)
+              return (Left [(sc, ty, name, ex)], tks)
             tk : _ -> return (Right $ "Expected semicolon, got : " ++ show tk, tks)
             _ -> return (Right "Expected semicolon", tks)
 
@@ -389,12 +394,12 @@ label name taken = do
       st <- statement
       return $ Statement (SD.Labeled name st) tokens
 
-varStatement :: Type -> Id -> [Token] -> State [Token] Statement
+varStatement :: Type -> Id -> [Token] -> State [Token] Statement -- TODO merge with declaration ?
 varStatement ty name taken = do
   statementTks <- collectUntil TD.Semicolon
   case map Token.def statementTks of
-    [] -> return $ Statement (SD.Var ((ty, name, Nothing) :| [])) taken
-    TD.Op Op.Assign : _ -> return $ Statement (SD.Var ((ty, name, Just $ expr $ drop 1 statementTks) :| [])) (taken ++ statementTks)
+    [] -> return $ Statement (SD.Var ((SC.Auto, ty, name, Nothing) :| [])) taken
+    TD.Op Op.Assign : _ -> return $ Statement (SD.Var ((SC.Auto, ty, name, Just $ expr $ drop 1 statementTks) :| [])) (taken ++ statementTks)
     _ -> return $ Statement (SD.Invalid ("Invalid assignment : " ++ show statementTks)) (taken ++ statementTks)
 
 exprList :: [Token] -> [Expr]
@@ -591,7 +596,7 @@ struct taken = do
         TD.Semicolon : _ -> do
           modify $ drop 1
           return $ Statement (SD.Struct name fields) (taken ++ tokens ++ take 1 tokens')
-        _ -> declaration ty (tokens ++ [head tokens'])
+        _ -> declaration SC.Infer ty (tokens ++ [head tokens'])
     Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
 
 union :: [Token] -> State [Token] Statement
@@ -605,7 +610,7 @@ union taken = do
         TD.Semicolon : _ -> do
           modify $ drop 1
           return $ Statement (SD.Union name fields) (taken ++ tokens ++ take 1 tokens')
-        _ -> declaration ty (tokens ++ [head tokens'])
+        _ -> declaration SC.Infer ty (tokens ++ [head tokens'])
     Left ty -> return $ Statement (SD.Invalid $ "Unexpected type " ++ show ty) (taken ++ tokens)
 
 structType :: State [Token] (Either Type String, [Token])
@@ -650,7 +655,7 @@ structOrUnionFields tokens = validate $ evalState statementList $ Token.filterNL
     makeField (SD.Union Nothing fields) = Left fields -- FIXME inner unions
     makeField st = Right $ "Invalid field : " ++ show st
 
-    varToField (ty, name, _) = (ty, name)
+    varToField (_, ty, name, _) = (ty, name)
 
 enum :: [Token] -> State [Token] Statement
 enum taken = do
@@ -677,7 +682,7 @@ enum taken = do
       case enumVariants enumTks of
         Left variants -> return $ Statement (SD.Enum name ty (Just variants)) (taken ++ enumTks ++ [head tokens''])
         Right err -> return $ Statement (SD.Invalid err) (taken ++ enumTks ++ [head tokens])
-    _ -> declaration ty (tokens ++ [head tokens'])
+    _ -> declaration SC.Infer ty (tokens ++ [head tokens'])
 
 collectEnumVariants :: State [Token] [Token]
 collectEnumVariants = collectUntilDelimiter Dl.Br

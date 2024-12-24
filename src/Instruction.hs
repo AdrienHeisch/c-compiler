@@ -18,6 +18,7 @@ instance Utils.Display Program where
 
 data Instruction
   = LABEL String -- TODO put this in a separate symbol type ?
+  | DATA [Int]
   | NOP
   | HALT Value
   | SYCALL Value

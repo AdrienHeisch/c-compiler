@@ -14,17 +14,35 @@ import Identifier (Id (..))
 import Instruction (Instruction (..), Program (..), Register (..), Value (..), regLen)
 import Op (Op)
 import Op qualified
-import Scope (Scope, declareFunc, defineFunc, getFunc, newFunction, newScope)
-import Scope qualified (addLabel, addVar, getVar, hasLabel, makeAnonLabel, new)
-import Statement (Statement)
+import Scope (Scope (Scope), declareFunc, defineFunc, getFunc, getGlobal, newFunction, newScope, setGlobal)
+import Scope qualified (Scope (..), addLabel, addVar, getLocalFuncs, getVar, hasLabel, makeAnonLabel, new)
+import Scope qualified as Context (Context (..))
+import Statement (Statement, StorageClass)
 import Statement qualified
+import Statement qualified as SC (StorageClass (..))
 import Statement qualified as SD (StatementDef (..))
 import Type (Type, paddedSizeof, sizeof)
 import Type qualified
-import Utils (Display (display), maybeListToList)
+import Utils (Display (display), maybeListToList, unreachable)
 
 compile :: [Statement] -> Program
-compile decls = Program $ evalState (statements decls) Scope.new
+compile decls =
+  let (instructions, globalScope) = runState (statements decls) Scope.new
+      globalData = case globalScope of
+        Scope _ _ _ (Context.Global gvars) -> makeData gvars
+        _ -> unreachable
+   in Program (instructions ++ globalData)
+
+makeData :: [(Type, Maybe Expr)] -> [Instruction]
+makeData gvars = case gvars of
+  [] -> []
+  (ty, mexpr) : rest ->
+    let value = case mexpr of
+          Nothing -> [0]
+          Just ex -> case Expr.def ex of
+            ED.IntLiteral _ int -> [Type.mask ty .&. int]
+            _ -> error $ "Not a constant value: " ++ display ex
+     in DATA value : makeData rest
 
 statements :: [Statement] -> State Scope [Instruction]
 statements sts = case sts of
@@ -56,9 +74,9 @@ statement st = case Statement.def st of
   SD.Invalid str -> error $ "Invalid statement : " ++ str
   _ -> error $ "Statement not implemented yet : " ++ display st
   where
-    vars :: [(Type, Id, Maybe Expr)] -> State Scope [Instruction]
+    vars :: [(StorageClass, Type, Id, Maybe Expr)] -> State Scope [Instruction]
     vars vs = do
-      ins <- mapM (\(ty, name, e) -> var ty name e) vs
+      ins <- mapM (\(sc, ty, name, e) -> var sc ty name e) vs
       return . concat $ ins
 
 funcDec :: Type -> Id -> [(Type, Maybe Id)] -> State Scope [Instruction]
@@ -68,16 +86,18 @@ funcDec ret name params = do
 
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Scope [Instruction]
 funcDef ret name params body = do
-  !_ <- Scope.defineFunc (Type.Function ret (map fst params), name)
   scope <- get
   Scope.newFunction
+  Scope.declareFunc (Type.Function ret (map fst params), name)
   collectLabels body
   let namedParams = mapMaybe (\(ty, nm) -> (ty,) <$> nm) params
   loadParams namedParams
   ins <- statements body
+  insLocals <- Scope.getLocalFuncs
   put scope
   let Id nameStr = name
-  return $ LABEL nameStr : ins
+  insFunc <- Scope.defineFunc (Type.Function ret (map fst params), name) (LABEL nameStr : ins)
+  return $ insFunc ++ insLocals
 
 loadParams :: [(Type, Id)] -> State Scope ()
 loadParams params = case params of
@@ -86,20 +106,34 @@ loadParams params = case params of
     !_ <- Scope.addVar (ty, name)
     loadParams rest
 
-var :: Type -> Id -> Maybe Expr -> State Scope [Instruction]
-var ty name mexpr = do
+var :: StorageClass -> Type -> Id -> Maybe Expr -> State Scope [Instruction]
+var sc' ty name mexpr = do
   !_ <- Scope.addVar (ty, name)
-  case mexpr of
-    Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
-    Just ex -> do
-      checkAssign ty ex $ do
-        case Expr.def ex of
-          ED.Initializer exs -> do
-            ins <- initializer ty exs
-            return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
-          _ -> do
-            ins <- expr ex
-            return $ ins ++ [PUSH (Reg R0)]
+  scope <- get
+  let sc = case (Scope.ctxt scope, sc') of
+        (Context.Local {}, SC.Infer) -> SC.Auto
+        (Context.Global {}, SC.Infer) -> SC.Static
+        _ -> sc'
+  case (Scope.ctxt scope, sc) of
+    (_, SC.Static) -> do
+      ctxt <- Scope.getGlobal
+      case ctxt of
+        Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(ty, mexpr)])
+        _ -> unreachable
+      return []
+    (Context.Local {}, SC.Auto) -> do
+      case mexpr of
+        Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
+        Just ex -> do
+          checkAssign ty ex $ do
+            case Expr.def ex of
+              ED.Initializer exs -> do
+                ins <- initializer ty exs
+                return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
+              _ -> do
+                ins <- expr ex
+                return $ ins ++ [PUSH (Reg R0)]
+    (ctxt, _) -> error $ "Invalid storage class " ++ show sc ++ " in context " ++ show ctxt
 
 initializer :: Type -> [(InitializerKind, Expr)] -> State Scope [Instruction]
 initializer ty = go 0
@@ -333,8 +367,9 @@ getVarAddr :: Id -> State Scope [Instruction]
 getVarAddr name = do
   mvar <- Scope.getVar name
   case mvar of
-    Just (addr, _) ->
-      return [SET R1 (Reg BP), ADD R1 addr]
+    Just (depth, addr, _) ->
+      let insBack = concat $ replicate depth [SUB R1 (Cst 1), LOAD R1 (Reg R1)]
+       in return $ SET R1 (Reg BP) : insBack ++ [ADD R1 addr]
     Nothing -> error $ "Undefined identifier : " ++ show name
 
 getMember :: Id -> Type -> (Type, Int)
@@ -363,7 +398,7 @@ eval ex = case Expr.def ex of
   ED.Id name -> do
     mty <- Scope.getVar name
     case mty of
-      Just (_, ty) -> return $ Left ty
+      Just (_, _, ty) -> return $ Left ty
       Nothing -> error $ "Undefined identifier : " ++ show name
   ED.IntLiteral ty _ -> return $ Left ty
   ED.FltLiteral ty _ -> return $ Left ty

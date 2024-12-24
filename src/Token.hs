@@ -57,6 +57,7 @@ data TokenDef
   | StrLiteral String
   | ImplInclude String
   | Const
+  | Static
   | If
   | Else
   | Switch
@@ -100,7 +101,7 @@ makeDef str = case str of
   "unsigned" -> Unsigned
   "auto" -> keywordUnimplErr str
   "const" -> keywordUnimplErr str
-  "static" -> keywordUnimplErr str
+  "static" -> Static
   "static_assert" -> keywordUnimplErr str
   "constexpr" -> keywordUnimplErr str
   "_Atomic" -> keywordUnimplErr str
