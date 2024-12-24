@@ -44,7 +44,7 @@ errs = genErrs isInvalid
     isInvalid (Token (Invalid _) _) = True
     isInvalid _ = False
 
-foldCrs :: [Token] -> Cursor
+foldCrs :: [Token] -> Maybe Cursor
 foldCrs = Cursor.fold . map Token.crs
 
 data TokenDef

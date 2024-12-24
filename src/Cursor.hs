@@ -15,8 +15,9 @@ head (Cursor idx _) = Cursor idx 1
 tail :: Cursor -> Cursor
 tail (Cursor idx len) = Cursor (idx Prelude.+ 1) (len - 1)
 
-fold :: [Cursor] -> Cursor
-fold cursors = go (Prelude.head cursors) (Prelude.tail cursors)
+fold :: [Cursor] -> Maybe Cursor
+fold [] = Nothing
+fold cursors = Just $ go (Prelude.head cursors) (Prelude.tail cursors)
   where
     go :: Cursor -> [Cursor] -> Cursor
     go cursor [] = cursor
