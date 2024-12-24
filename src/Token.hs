@@ -17,7 +17,6 @@ module Token
 where
 
 import CharClasses qualified as CC
-import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Control.Monad.State.Lazy (State, get, modify)
 import Cursor (Cursor, fold)
 import Data.Char (ord, toLower)
@@ -53,9 +52,9 @@ data TokenDef
   | Unsigned
   | Op Op
   | Id Id
-  | IntLiteral (Constant IntRepr)
-  | FltLiteral (Constant FltRepr)
-  | StrLiteral (Constant StrRepr)
+  | IntLiteral Type Int
+  | FltLiteral Type Float
+  | StrLiteral String
   | ImplInclude String
   | Const
   | If
@@ -185,12 +184,12 @@ makeDef str = case str of
   "}" -> DelimClose Delimiter.Br
   "[" -> DelimOpen Delimiter.SqBr
   "]" -> DelimClose Delimiter.SqBr
-  "false" -> IntLiteral $ Constant Type.Bool 0
-  "true" -> IntLiteral $ Constant Type.Bool 1
-  _ | isStringLiteral str -> StrLiteral $ Constant (Type.Array Type.Char $ length str - 2) (tail (take (length str - 1) str))
-  _ | isCharLiteral str -> IntLiteral $ Constant Type.Char (ord $ read str)
-  _ | isIntLiteral str -> IntLiteral $ Constant Type.Int (read str)
-  _ | isFltLiteral str -> FltLiteral $ Constant Type.Float (read str)
+  "false" -> IntLiteral Type.Bool 0
+  "true" -> IntLiteral Type.Bool 1
+  _ | isStringLiteral str -> StrLiteral (tail (take (length str - 1) str))
+  _ | isCharLiteral str -> IntLiteral Type.Char (ord $ read str)
+  _ | isIntLiteral str -> IntLiteral Type.Int (read str)
+  _ | isFltLiteral str -> FltLiteral Type.Float (read str)
   _ | isIdentifier str -> Id (Identifier.Id str)
   _ | isNewLine str -> NL
   _ | isWhitespace str -> Nil
@@ -256,9 +255,9 @@ defToStr tkDef = case tkDef of
   Id name -> Identifier.toStr name
   DelimOpen dl -> Delimiter.toStrOpen dl
   DelimClose dl -> Delimiter.toStrClose dl
-  IntLiteral (Constant _ int) -> show int
-  FltLiteral (Constant _ flt) -> show flt
-  StrLiteral (Constant _ str) -> str
+  IntLiteral _ int -> show int
+  FltLiteral _ flt -> show flt
+  StrLiteral str -> str
   ImplInclude str -> "<" ++ str ++ ">"
   Semicolon -> ";"
   Directive str -> "#" ++ str

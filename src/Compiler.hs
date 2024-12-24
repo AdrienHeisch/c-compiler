@@ -2,8 +2,8 @@
 
 module Compiler (compile) where
 
-import Constant (Constant (Constant))
-import Control.Monad.State.Lazy (State, evalState, get, put)
+import Control.Monad.State.Lazy (State, get, put, runState)
+import Data.Bits ((.&.))
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
 import Expr (Expr (Expr), InitializerKind)
@@ -202,7 +202,7 @@ expr e = do
       if Type.isComplex ty
         then return $ insVar ++ [SET R0 (Reg R1)]
         else return $ insVar ++ [LOAD R0 (Reg R1)]
-    ED.IntLiteral (Constant Type.Int int) -> do
+    ED.IntLiteral _ int -> do
       return [SET R0 (Cst int)]
     -- ED.FltLiteral flt -> []
     -- ED.StrLiteral str -> []
@@ -365,9 +365,9 @@ eval ex = case Expr.def ex of
     case mty of
       Just (_, ty) -> return $ Left ty
       Nothing -> error $ "Undefined identifier : " ++ show name
-  ED.IntLiteral (Constant ty _) -> return $ Left ty
-  ED.FltLiteral (Constant ty _) -> return $ Left ty
-  ED.StrLiteral (Constant ty _) -> return $ Left ty
+  ED.IntLiteral ty _ -> return $ Left ty
+  ED.FltLiteral ty _ -> return $ Left ty
+  ED.StrLiteral str -> return . Left $ Type.Array Type.Char (length str)
   ED.Initializer _ -> return $ Left Type.Infer {- case exs of -- return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
                                                [] -> return $ Left Type.Void
                                                (_, ex') : _ -> do

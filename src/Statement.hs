@@ -1,6 +1,5 @@
 module Statement (Statement (..), StatementDef (..), isTopLevel, errs) where
 
-import Constant (Constant, IntRepr)
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (catMaybes, mapMaybe)
 import Expr (Expr)
@@ -38,7 +37,7 @@ data StatementDef
   | Break
   | Continue
   | Return (Maybe Expr)
-  | Case (Constant IntRepr)
+  | Case Int
   | Default
   | Goto Id
   | Labeled Id Statement

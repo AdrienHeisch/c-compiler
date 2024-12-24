@@ -1,6 +1,5 @@
 module Preprocessor (process) where
 
-import Constant (Constant (..))
 import Control.Monad.State.Lazy (State, StateT (runStateT), evalStateT, get, liftIO, modify, put, runState)
 import Cursor (Cursor, (|+|))
 import Cursor qualified
@@ -14,7 +13,6 @@ import System.FilePath (combine, normalise, takeDirectory)
 import Token (Token (..))
 import Token qualified (collectUntil, collectUntilDelimiter, defToStr, errs, filterNil)
 import Token qualified as TD (TokenDef (..))
-import Type qualified as Ty (Type (..))
 import Utils (Display(display), genErrs, mtransform)
 import Debug.Trace (trace)
 
@@ -105,7 +103,7 @@ applyDirective sourcePath directive = case directive of
 parseInclude :: [Token] -> Directive
 parseInclude tokens = case map def tokens of
   [TD.Nil, TD.ImplInclude fileName] -> Include True fileName
-  [TD.Nil, TD.StrLiteral (Constant _ fileName)] -> Include False fileName
+  [TD.Nil, TD.StrLiteral fileName] -> Include False fileName
   tks -> Invalid $ "Invalid include " ++ show tks
 
 parseDefine :: [Token] -> Directive
@@ -200,7 +198,7 @@ applyDefine name params template =
           _ : _ -> head tokens : go (tail tokens)
 
     stringize :: [Token] -> Token
-    stringize arg = Token (TD.StrLiteral (Constant (Ty.Array Ty.Char $ length str) str)) cursor
+    stringize arg = Token (TD.StrLiteral str) cursor
       where
         cursor :: Cursor
         cursor = Token.crs (head arg) |+| Token.crs (last arg)

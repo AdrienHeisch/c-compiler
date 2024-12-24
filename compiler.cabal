@@ -71,7 +71,6 @@ executable compiler
         Parser,
         Type,
         Identifier,
-        Constant,
         Statement,
         Expr,
         Utils,

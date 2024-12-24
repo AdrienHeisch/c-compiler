@@ -1,6 +1,5 @@
 module Expr (Expr (..), ExprDef (..), InitializerKind (..), errs) where
 
-import Constant (Constant (..), FltRepr, IntRepr, StrRepr)
 import Data.List (intercalate)
 import Identifier (Id)
 import Op (Op)
@@ -17,9 +16,9 @@ instance Display Expr where
 
 data ExprDef
   = Id Id
-  | IntLiteral (Constant IntRepr)
-  | FltLiteral (Constant FltRepr)
-  | StrLiteral (Constant StrRepr)
+  | IntLiteral Type Int
+  | FltLiteral Type Float
+  | StrLiteral String
   | Initializer [(InitializerKind, Expr)]
   | UnopPre {op :: Op, ex :: Expr}
   | UnopPost {op :: Op, ex :: Expr}

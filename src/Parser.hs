@@ -1,6 +1,5 @@
 module Parser (parse) where
 
-import Constant (Constant (..))
 import Control.Monad.State.Lazy (State, evalState, get, modify, runState)
 import Cursor (CursorOps (..))
 import Data.List (intercalate)
@@ -51,10 +50,10 @@ static tokens = case tokens of
     : Token (TD.Type ty) cr
     : tks ->
       static (Token (TD.Type (Ty.unsigned ty)) (cl |+| cr) : tks)
-  Token (TD.StrLiteral (Constant (Ty.Array Ty.Char lenl) strl)) cl
-    : Token (TD.StrLiteral (Constant (Ty.Array Ty.Char lenr) strr)) cr
+  Token (TD.StrLiteral strl) cl
+    : Token (TD.StrLiteral strr) cr
     : tks ->
-      static (Token (TD.StrLiteral (Constant (Ty.Array Ty.Char (lenl + lenr)) (strl ++ strr))) (cl |+| cr) : tks)
+      static (Token (TD.StrLiteral (strl ++ strr)) (cl |+| cr) : tks)
   (tk : tks) -> tk : static tks
 
 statementList :: State [Token] [Statement]
@@ -256,7 +255,7 @@ makeType spec = go spec Nothing False
             else
               let ex = expr lenTks
                in case Expr.def ex of
-                    ED.IntLiteral (Constant len_ty len)
+                    ED.IntLiteral len_ty len
                       | Ty.isInteger len_ty ->
                           return (Left (Ty.Array ty len, name), take 1 tokens)
                     _ -> return (Right $ "Invalid array size : " ++ show lenTks, lenTks)
@@ -308,15 +307,11 @@ case_ :: [Token] -> State [Token] Statement
 case_ taken = do
   tokens <- get
   case map Token.def tokens of
-    TD.IntLiteral constant@(Constant ty _)
+    TD.IntLiteral _ int
       : TD.Op Op.Colon
       : _ -> do
         modify $ drop 2
-        let stDef =
-              if Ty.isInteger ty
-                then SD.Case constant
-                else SD.Invalid $ "Invalid type for case constant: " ++ show ty
-        return $ Statement stDef (taken ++ take 2 tokens)
+        return $ Statement (SD.Case int) (taken ++ take 2 tokens)
     _ -> do
       tks <- collectUntil (TD.Op Op.Colon)
       return $ Statement (SD.Invalid $ "Invalid case constant: " ++ show tks) (taken ++ tks)
@@ -412,14 +407,12 @@ expr :: [Token] -> Expr
 expr tokens = case map Token.def tokens of
   [] ->
     Expr (ED.Invalid "Empty expression") tokens
-  TD.IntLiteral constant : _
-    | Ty.isInteger $ Constant.ty constant ->
-        exprNext tk (ED.IntLiteral constant) tks
-  TD.FltLiteral constant : _
-    | Ty.isFloating $ Constant.ty constant ->
-        exprNext tk (ED.FltLiteral constant) tks
-  TD.StrLiteral constant@(Constant (Ty.Array Ty.Char _) _) : _ ->
-    exprNext tk (ED.StrLiteral constant) tks
+  TD.IntLiteral ty int : _ ->
+        exprNext tk (ED.IntLiteral ty int) tks
+  TD.FltLiteral ty flt : _ ->
+        exprNext tk (ED.FltLiteral ty flt) tks
+  TD.StrLiteral str : _ ->
+    exprNext tk (ED.StrLiteral str) tks
   TD.Id identifier : _ ->
     exprNext tk (ED.Id identifier) tks
   TD.Op Op.Sizeof : TD.DelimOpen Dl.Pr : _ -> sizeof
@@ -476,7 +469,7 @@ exprNext taken ex tokens = case map Token.def tokens of
   [] -> Expr ex taken
   [TD.Op op] | Op.isUnaryPost op -> Expr (ED.UnopPost op (Expr ex taken)) tks
   TD.Op op : _ | Op.isBinary op -> binop tks ex op (expr (tail tokens))
-  TD.DelimOpen Dl.SqBr : _ -> 
+  TD.DelimOpen Dl.SqBr : _ ->
     let (subscript, rest) = collectIndex (tail tokens)
      in exprNext tokens (ED.Binop (Expr ex taken) Op.Subscript (expr subscript)) rest
   TD.DelimOpen Dl.Pr : _ ->
