@@ -28,6 +28,7 @@ data ExprDef
   | Call {ex :: Expr, args :: [Expr]}
   | Parenthese Expr
   | SizeofType Type
+  | Ambiguous Expr Expr
   | Invalid String
   deriving (Show)
 

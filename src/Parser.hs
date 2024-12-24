@@ -459,7 +459,10 @@ expr tokens = case map Token.def tokens of
             Left (ty, Nothing) ->
               case map Token.def rest of
                 TD.DelimClose Dl.Pr : _ ->
-                  Expr (ED.UnopPre (Op.Cast ty) (expr $ drop 1 rest)) tokens
+                  let cast = Expr (ED.UnopPre (Op.Cast ty) (expr $ drop 1 rest)) tokens
+                   in case ty of
+                    Ty.Typedef _ -> Expr (ED.Ambiguous cast notType) tokens
+                    _ -> cast
                 _ -> notType
             Left (_, Just name) -> Expr (ED.Invalid $ "Unexpected identifier : " ++ show name) tyTks
             Right _ -> notType
@@ -479,7 +482,7 @@ exprNext taken ex tokens = case map Token.def tokens of
   TD.DelimOpen Dl.Pr : _ ->
     let args = collectArguments (tail tokens)
      in Expr (ED.Call (Expr ex taken) (exprList args)) (taken ++ take (1 + length args) tokens)
-  _ -> Expr (ED.Invalid ("Invalid follow expression for " ++ display ex ++ " : " ++ display tokens)) tokens
+  _ -> Expr (ED.Invalid ("Invalid follow expression for " ++ display ex ++ " : " ++ display tokens)) (taken ++ tokens)
   where
     tks = taken ++ take 1 tokens
 

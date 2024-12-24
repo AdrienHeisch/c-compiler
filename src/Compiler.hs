@@ -212,6 +212,7 @@ expr e = do
     -- ED.Ternary ter_cond ter_then ter_else -> []
     ED.Call ex args -> call ex args
     ED.Parenthese ex -> expr ex
+    ED.Ambiguous left right -> expr $ solveAmbiguous left right
     ED.Invalid str -> error $ "Invalid expression : " ++ str
     _ -> error $ "Expression not implemented yet : " ++ display e
   withMask ins
@@ -324,6 +325,8 @@ exprAddress e = case Expr.def e of
         let (_, addr) = getMember name leftTy
         return $ insAddr ++ [ADD R1 (Cst addr)]
       _ -> error $ "Invalid member " ++ display right
+  ED.Parenthese ex' -> lvalue ex'
+  ED.Ambiguous left right -> lvalue $ solveAmbiguous left right
   _ -> error $ "Can't get address of : " ++ display e
 
 getVarAddr :: Id -> State Scope [Instruction]
@@ -403,6 +406,7 @@ eval ex = case Expr.def ex of
     return $ evalCall ev
   ED.Parenthese ex' -> eval ex'
   ED.SizeofType _ -> return $ Left Type.Int
+  ED.Ambiguous left right -> eval $ solveAmbiguous left right
   ED.Invalid str -> return $ Right $ "Evaluating invalid expression : " ++ str
   where
     evalCall :: Either Type String -> Either Type String
@@ -416,3 +420,11 @@ evalOrThrow :: Expr -> State Scope Type
 evalOrThrow ex = do
   ev <- eval ex
   return $ case ev of Left ty -> ty; Right err -> error err
+
+solveAmbiguous :: Expr -> Expr -> Expr
+solveAmbiguous left right = case (Expr.def left, Expr.def right) of
+  (ED.UnopPre (Op.Cast _) _, _) -> right
+  -- case ty' of
+  -- Type.Typedef _ -> error "Typedefs not implemented"
+  -- _ -> right
+  (_, _) -> error $ "Unknown ambiguous case " ++ display left ++ " vs " ++ display right

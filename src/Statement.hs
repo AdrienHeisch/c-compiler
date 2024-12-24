@@ -42,7 +42,7 @@ data StatementDef
   | Default
   | Goto Id
   | Labeled Id Statement
-  | Ambiguous (Statement, Statement)
+  | Ambiguous Statement Statement
   | Invalid String
   deriving (Show)
 
