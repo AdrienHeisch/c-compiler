@@ -206,10 +206,8 @@ expr e = do
     -- ED.UnopPost op ex -> []
     ED.Binop left op right -> do
       case Op.getBinaryAssignOp op of
-        Just innerOp -> do
-          insBinop <- binop left innerOp right
-          insAssign <- binop left Op.Assign right
-          return $ insBinop ++ insAssign
+        Just innerOp ->
+          expr $ Expr (ED.Binop left Op.Assign (Expr (ED.Binop left innerOp right) (Expr.tks e))) (Expr.tks e)
         Nothing -> binop left op right
     -- ED.Ternary ter_cond ter_then ter_else -> []
     ED.Call ex args -> call ex args
