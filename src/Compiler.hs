@@ -107,7 +107,7 @@ loadParams params = case params of
     loadParams rest
 
 var :: StorageClass -> Type -> Id -> Maybe Expr -> State Scope [Instruction]
-var sc' ty name mexpr = do
+var sc' ty name mexpr = checkAssign ty mexpr $ do
   !_ <- Scope.addVar (ty, name)
   scope <- get
   let sc = case (Scope.ctxt scope, sc') of
@@ -121,18 +121,15 @@ var sc' ty name mexpr = do
         Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(ty, mexpr)])
         _ -> unreachable
       return []
-    (Context.Local {}, SC.Auto) -> do
-      case mexpr of
-        Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
-        Just ex -> do
-          checkAssign ty ex $ do
-            case Expr.def ex of
-              ED.Initializer exs -> do
-                ins <- initializer ty exs
-                return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
-              _ -> do
-                ins <- expr ex
-                return $ ins ++ [PUSH (Reg R0)]
+    (Context.Local {}, SC.Auto) -> case mexpr of
+      Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
+      Just ex -> case Expr.def ex of
+        ED.Initializer exs -> do
+          ins <- initializer ty exs
+          return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
+        _ -> do
+          ins <- expr ex
+          return $ ins ++ [PUSH (Reg R0)]
     (ctxt, _) -> error $ "Invalid storage class " ++ show sc ++ " in context " ++ show ctxt
 
 initializer :: Type -> [(InitializerKind, Expr)] -> State Scope [Instruction]
@@ -264,18 +261,13 @@ expr e = do
         else return ins
 
 unop :: Op -> Expr -> State Scope [Instruction]
-unop op ex =
+unop op ex = do
   let insOp = case op of
         Op.MultOrIndir -> [LOAD R0 (Reg R0)]
         Op.BitAndOrAddr -> [SET R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
-   in case op of
-        _ | Op.isUnopAddressing op -> do
-          insAddr <- expr ex
-          return $ insAddr ++ insOp
-        _ | otherwise -> do
-          insEx <- expr ex
-          return $ insEx ++ insOp
+  insEx <- expr ex
+  return $ insEx ++ insOp
 
 binop :: Expr -> Op -> Expr -> State Scope [Instruction]
 binop left op right = do
@@ -300,11 +292,10 @@ binop left op right = do
         Op.Member -> [ADD R1 (Reg R0), LOAD R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
-        _ | Op.isBinopAddressing op -> do
-          checkAssign leftTy right $ do
-            insAddr <- lvalue left
-            insVal <- expr right
-            return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
+        Op.Assign -> checkAssign leftTy (Just right) $ do
+          insAddr <- lvalue left
+          insVal <- expr right
+          return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
         _ | Op.isBinopMember op -> case Expr.def right of
           ED.Id name -> do
             insAddr <- expr left
@@ -468,8 +459,9 @@ evalOrThrow ex = do
   ev <- eval ex
   return $ case ev of Left ty -> ty; Right err -> error err
 
-checkAssign :: Type -> Expr -> State Scope a -> State Scope a
-checkAssign leftTy right f = do
+checkAssign :: Type -> Maybe Expr -> State Scope a -> State Scope a
+checkAssign _ Nothing f = f
+checkAssign leftTy (Just right) f = do
   rightTy <- evalOrThrow right
   let ret
         | leftTy == rightTy = f
