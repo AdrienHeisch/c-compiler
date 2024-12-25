@@ -293,16 +293,26 @@ binop left op right = do
           Type.Pointer ty' -> [MUL R4 (Cst $ sizeof ty'), ADD R4 (Reg R0), LOAD R0 (Reg R4)]
           _ -> error "Subscript on invalid value"
         Op.Member -> [ADD R1 (Reg R0), LOAD R0 (Reg R1)]
+        Op.MemberPtr -> [LOAD R1 (Reg R1), ADD R1 (Reg R0), LOAD R0 (Reg R1)]
         _ -> error $ "Operator not implemented : " ++ show op
    in case op of
         Op.Assign -> checkAssign leftTy (Just right) $ do
           insAddr <- lvalue left
           insVal <- expr right
           return $ insAddr ++ [PUSH (Reg R1)] ++ insVal ++ [POP R5] ++ insOp
-        _ | Op.isBinopMember op -> case Expr.def right of
+        Op.Member -> case Expr.def right of
           ED.Id name -> do
             insAddr <- expr left
             let (_, addr) = getMember name leftTy
+            return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp
+          _ -> error $ "Invalid member " ++ display right
+        Op.MemberPtr -> case Expr.def right of
+          ED.Id name -> do
+            let innerTy = case leftTy of
+                  Type.Pointer ty' -> ty'
+                  _ -> error "Not a pointer"
+            insAddr <- expr left
+            let (_, addr) = getMember name innerTy
             return $ insAddr ++ [SET R0 (Cst addr)] ++ insOp
           _ -> error $ "Invalid member " ++ display right
         _ | otherwise -> do
@@ -352,6 +362,17 @@ lvalue e = case Expr.def e of
         insAddr <- lvalue left
         let (_, addr) = getMember name leftTy
         return $ insAddr ++ [ADD R1 (Cst addr)]
+      _ -> error $ "Invalid member " ++ display right
+  ED.Binop left Op.MemberPtr right -> do
+    leftTy <- evalOrThrow left
+    let innerTy = case leftTy of
+          Type.Pointer ty' -> ty'
+          _ -> error "Not a pointer"
+    case Expr.def right of
+      ED.Id name -> do
+        insAddr <- lvalue left
+        let (_, addr) = getMember name innerTy
+        return $ insAddr ++ [LOAD R1 (Reg R1)] ++ [ADD R1 (Cst addr)]
       _ -> error $ "Invalid member " ++ display right
   ED.Parenthese ex' -> lvalue ex'
   ED.Ambiguous left right -> lvalue $ solveAmbiguous left right
@@ -425,6 +446,16 @@ eval ex = case Expr.def ex of
           let (ty', _) = getMember field ty
            in return $ Left ty'
         _ -> error $ "Invalid member " ++ display right
+      ret -> return ret
+  ED.Binop left Op.MemberPtr right -> do
+    ev <- eval left
+    case ev of
+      Left (Type.Pointer ty) -> case Expr.def right of
+        ED.Id field -> do
+          let (ty', _) = getMember field ty
+           in return $ Left ty'
+        _ -> error $ "Invalid member " ++ display right
+      Left _ -> error "Not a pointer"
       ret -> return ret
   ED.Binop left Op.Subscript _ -> do
     ev <- eval left

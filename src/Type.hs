@@ -140,6 +140,7 @@ canCast :: Type -> Type -> Bool
 canCast from to
   | isInteger from && isInteger to && sizeof from < sizeof to = True
   | otherwise = case (from, to) of
+      (_, Pointer _) | isInteger from -> True
       (Array fromTy _, Pointer toTy) | fromTy == toTy -> True
       _ -> False
 
