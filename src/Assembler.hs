@@ -25,8 +25,14 @@ bytecode instr = case instr of
   SET r (Cst c) -> makeRC r c
   LOAD r (Reg r') -> makeRR r r'
   LOAD r (Cst c) -> makeRC r c
-  STORE r (Reg r') -> makeRR r r'
-  STORE r (Cst c) -> makeRC r c
+  STRB r (Reg r') -> makeRR r r'
+  STRB r (Cst c) -> makeRC r c
+  STRH r (Reg r') -> makeRR r r'
+  STRH r (Cst c) -> makeRC r c
+  STRW r (Reg r') -> makeRR r r'
+  STRW r (Cst c) -> makeRC r c
+  STRD r (Reg r') -> makeRR r r'
+  STRD r (Cst c) -> makeRC r c
   SWAP r r' -> makeRR r r'
   CMP r (Reg r') -> makeRR r r'
   CMP r (Cst c) -> makeRC r c

@@ -39,7 +39,7 @@ makeData gvars = case gvars of
     let value = case mexpr of
           Nothing -> [0]
           Just ex -> case Expr.def ex of
-            ED.IntLiteral _ int -> intoBytes (Type.sizeof ty) int
+            ED.IntLiteral _ int -> intoBytes (Type.paddedSizeof ty) int
             _ -> error $ "Not a constant value: " ++ display ex
      in STATIC name value : makeData rest
 
@@ -139,17 +139,21 @@ initializer ty = go 0
       (IK.Simple, ex) : _ -> do
         insEx <- expr ex
         insRest <- go (idx + 1) $ tail exs
-        return $ insEx ++ [STORE R6 (Reg R0), ADD R6 (Cst $ sizeAt idx)] ++ insRest
+        return $ insEx ++ [storeTy (tyAt idx) R6 (Reg R0), ADD R6 (Cst $ sizeAt idx)] ++ insRest
       ex@(ik@(IK.Index _), _) : next : _ -> do
         isUnified <- unified ex next
         if isUnified
           then error $ "Initializer not implemented " ++ show ik
           else error "Index initialized but list is not uniform"
       (ik, _) : _ -> error $ "Initializer not implemented " ++ show ik
-    sizeAt _ = case ty of
-      Type.Array ty' _ -> sizeof ty'
-      Type.ArrayNoHint ty' -> sizeof ty'
+
+    tyAt _ = case ty of -- TODO struct with idx
+      Type.Array ty' _ -> ty'
+      Type.ArrayNoHint ty' -> ty'
       _ -> error "Invalid type for initializer"
+
+    sizeAt idx = sizeof $ tyAt idx
+
     unified (_, first) (_, next) = do
       fTy <- evalOrThrow first
       nTy <- evalOrThrow next
@@ -283,7 +287,7 @@ binop left op right = do
         Op.MultOrIndir -> [MUL R0 (Reg R4)]
         Op.Div -> [DIV R0 (Reg R4)]
         Op.Mod -> [MOD R0 (Reg R4)]
-        Op.Assign -> [STORE R5 (Reg R0)]
+        Op.Assign -> [storeTy leftTy R5 (Reg R0)]
         Op.Subscript -> case leftTy of
           Type.Array ty' _ -> [MUL R4 (Cst $ sizeof ty'), ADD R4 (Reg R0), LOAD R0 (Reg R4)]
           Type.Pointer ty' -> [MUL R4 (Cst $ sizeof ty'), ADD R4 (Reg R0), LOAD R0 (Reg R4)]
@@ -469,6 +473,14 @@ checkAssign leftTy (Just right) f = do
         | Type.canCast rightTy leftTy = f
         | otherwise = error $ "Can't assign " ++ Type.toStr rightTy ++ " to " ++ Type.toStr leftTy
    in ret
+
+storeTy :: Type -> Register -> Value -> Instruction
+storeTy ty reg val = case sizeof ty of
+  1 -> STRB reg val
+  2 -> STRH reg val
+  4 -> STRW reg val
+  8 -> STRD reg val
+  _ -> error $ "Can't store type " ++ show ty
 
 solveAmbiguous :: Expr -> Expr -> Expr
 solveAmbiguous left right = case (Expr.def left, Expr.def right) of

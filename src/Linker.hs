@@ -74,7 +74,10 @@ replaceLabels instr = case instr of
   SYCALL (Lbl lbl) -> mk SYCALL lbl
   SET r (Lbl lbl) -> mk (SET r) lbl
   LOAD r (Lbl lbl) -> mk (LOAD r) lbl
-  STORE r (Lbl lbl) -> mk (STORE r) lbl
+  STRB r (Lbl lbl) -> mk (STRW r) lbl
+  STRH r (Lbl lbl) -> mk (STRW r) lbl
+  STRW r (Lbl lbl) -> mk (STRW r) lbl
+  STRD r (Lbl lbl) -> mk (STRW r) lbl
   CMP r (Lbl lbl) -> mk (CMP r) lbl
   ADD r (Lbl lbl) -> mk (ADD r) lbl
   SUB r (Lbl lbl) -> mk (SUB r) lbl

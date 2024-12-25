@@ -25,7 +25,10 @@ data Instruction
   | CLEAR Register
   | SET Register Value
   | LOAD Register Value
-  | STORE Register Value
+  | STRB Register Value
+  | STRH Register Value
+  | STRW Register Value
+  | STRD Register Value
   | SWAP Register Register
   | CMP Register Value
   | NEG Register
@@ -103,45 +106,48 @@ toOpCode ins = case ins of
   CLEAR _ -> 0x03
   SET _ _ -> 0x04
   LOAD _ _ -> 0x05
-  STORE _ _ -> 0x06
-  SWAP _ _ -> 0x07
-  CMP _ _ -> 0x08
-  NEG _ -> 0x09
-  INC _ -> 0x0A
-  DEC _ -> 0x0B
-  ADD _ _ -> 0x0C
-  SUB _ _ -> 0x0D
-  MUL _ _ -> 0x0E
-  DIV _ _ -> 0x0F
-  MOD _ _ -> 0x10
-  NOT _ -> 0x11
-  AND _ _ -> 0x12
-  OR _ _ -> 0x13
-  XOR _ _ -> 0x14
-  NAND _ _ -> 0x15
-  NOR _ _ -> 0x16
-  NXOR _ _ -> 0x17
-  SHL _ _ -> 0x18
-  SHR _ _ -> 0x19
-  RCL _ _ -> 0x1A
-  RCR _ _ -> 0x1B
-  BSWAP _ -> 0x1C
-  PUSH _ -> 0x1D
-  DUP _ -> 0x1E
-  POP _ -> 0x1F
-  DROP -> 0x20
-  CALL _ -> 0x21
-  RET _ -> 0x22
-  JMP _ -> 0x23
-  JEQ _ _ -> 0x24
-  JNE _ _ -> 0x25
-  JGT _ _ -> 0x26
-  JGE _ _ -> 0x27
-  JLT _ _ -> 0x28
-  JLE _ _ -> 0x29
-  PRINT _ -> 0x2A
-  EPRINT _ -> 0x2B
-  DUMP -> 0x2C
+  STRB _ _ -> 0x06
+  STRH _ _ -> 0x07
+  STRW _ _ -> 0x08
+  STRD _ _ -> 0x09
+  SWAP _ _ -> 0x0A
+  CMP _ _ -> 0x0B
+  NEG _ -> 0x0C
+  INC _ -> 0x0D
+  DEC _ -> 0x0E
+  ADD _ _ -> 0x0F
+  SUB _ _ -> 0x10
+  MUL _ _ -> 0x11
+  DIV _ _ -> 0x12
+  MOD _ _ -> 0x13
+  NOT _ -> 0x14
+  AND _ _ -> 0x15
+  OR _ _ -> 0x16
+  XOR _ _ -> 0x17
+  NAND _ _ -> 0x18
+  NOR _ _ -> 0x19
+  NXOR _ _ -> 0x1A
+  SHL _ _ -> 0x1B
+  SHR _ _ -> 0x1C
+  RCL _ _ -> 0x1D
+  RCR _ _ -> 0x1E
+  BSWAP _ -> 0x1F
+  PUSH _ -> 0x20
+  DUP _ -> 0x21
+  POP _ -> 0x22
+  DROP -> 0x23
+  CALL _ -> 0x24
+  RET _ -> 0x25
+  JMP _ -> 0x26
+  JEQ _ _ -> 0x27
+  JNE _ _ -> 0x28
+  JGT _ _ -> 0x29
+  JGE _ _ -> 0x2A
+  JLT _ _ -> 0x2B
+  JLE _ _ -> 0x2C
+  PRINT _ -> 0x2D
+  EPRINT _ -> 0x2E
+  DUMP -> 0x2F
   _ -> error "Not opcode"
 
 len :: (Num a) => Instruction -> a
@@ -154,7 +160,10 @@ len ins = case ins of
   CLEAR _ -> 3
   SET _ v -> 2 + valueLen v
   LOAD _ v -> 2 + valueLen v
-  STORE _ v -> 2 + valueLen v
+  STRB _ v -> 2 + valueLen v
+  STRH _ v -> 2 + valueLen v
+  STRW _ v -> 2 + valueLen v
+  STRD _ v -> 2 + valueLen v
   SWAP _ _ -> 3
   CMP _ v -> 2 + valueLen v
   NEG _ -> 3
