@@ -1,6 +1,8 @@
 module Utils where
 
 import Control.Monad.State.Lazy (State, StateT, get, put, runState)
+import Data.Word (Word8)
+import Data.Bits (Bits (shiftR, (.&.)))
 
 mtransform :: State a b -> StateT a IO b
 mtransform st = do
@@ -33,6 +35,12 @@ modifyFirst _ _ [] = []
 modifyFirst predicate transformer (x : xs)
   | predicate x = transformer x : xs
   | otherwise = x : modifyFirst predicate transformer xs
+
+intoByte :: (Integral a) => a -> Word8
+intoByte n = fromIntegral n :: Word8
+
+intoBytes :: (Integral a, Bits a) => Int -> a -> [Word8]
+intoBytes len n = [fromIntegral ((n `shiftR` (i * 8)) .&. 0xFF) | i <- [0 .. len - 1]]
 
 unreachable :: a
 unreachable = error "Unreachable code, or so I thought"

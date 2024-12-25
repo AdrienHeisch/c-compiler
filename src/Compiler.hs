@@ -3,7 +3,6 @@
 module Compiler (compile) where
 
 import Control.Monad.State.Lazy (State, get, put, runState)
-import Data.Bits ((.&.))
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (mapMaybe, maybeToList)
 import Expr (Expr (Expr), InitializerKind)
@@ -23,7 +22,7 @@ import Statement qualified as SC (StorageClass (..))
 import Statement qualified as SD (StatementDef (..))
 import Type (Type, paddedSizeof, sizeof)
 import Type qualified
-import Utils (Display (display), maybeListToList, unreachable)
+import Utils (Display (display), intoBytes, maybeListToList, unreachable)
 
 compile :: [Statement] -> Program
 compile decls =
@@ -33,16 +32,16 @@ compile decls =
         _ -> unreachable
    in Program (instructions ++ globalData)
 
-makeData :: [(Type, Maybe Expr)] -> [Instruction]
+makeData :: [(Type, Id, Maybe Expr)] -> [Instruction]
 makeData gvars = case gvars of
   [] -> []
-  (ty, mexpr) : rest ->
+  (ty, Id name, mexpr) : rest ->
     let value = case mexpr of
           Nothing -> [0]
           Just ex -> case Expr.def ex of
-            ED.IntLiteral _ int -> [Type.mask ty .&. int]
+            ED.IntLiteral _ int -> intoBytes (Type.sizeof ty) int
             _ -> error $ "Not a constant value: " ++ display ex
-     in DATA value : makeData rest
+     in STATIC name value : makeData rest
 
 statements :: [Statement] -> State Scope [Instruction]
 statements sts = case sts of
@@ -118,7 +117,7 @@ var sc' ty name mexpr = checkAssign ty mexpr $ do
     (_, SC.Static) -> do
       ctxt <- Scope.getGlobal
       case ctxt of
-        Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(ty, mexpr)])
+        Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(ty, name, mexpr)])
         _ -> unreachable
       return []
     (Context.Local {}, SC.Auto) -> case mexpr of
@@ -358,6 +357,7 @@ getVarAddr :: Id -> State Scope [Instruction]
 getVarAddr name = do
   mvar <- Scope.getVar name
   case mvar of
+    Just (_, Lbl lbl, _) -> return [SET R1 (Lbl lbl)]
     Just (depth, addr, _) ->
       let insBack = concat $ replicate depth [SUB R1 (Cst 1), LOAD R1 (Reg R1)]
        in return $ SET R1 (Reg BP) : insBack ++ [ADD R1 addr]

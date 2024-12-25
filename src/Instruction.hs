@@ -1,5 +1,6 @@
 module Instruction (Program (..), Instruction (..), Register (..), Cst, Value (..), regLen, len, toOpCode) where
 
+import Data.Word (Word8)
 import Text.Printf (printf)
 import Utils (Display (display))
 
@@ -8,7 +9,6 @@ newtype Program = Program [Instruction]
 
 instance Utils.Display Program where
   display :: Program -> String
-  -- display (Program ins) = intercalate "\n" . map show $ ins
   display (Program ins) = go 0 ins
     where
       go (pc :: Int) ins' = case ins' of
@@ -17,8 +17,8 @@ instance Utils.Display Program where
         instr : rest -> "  " ++ printf "%04d" pc ++ "  " ++ show instr ++ "\n" ++ go (pc + len instr) rest
 
 data Instruction
-  = LABEL String -- TODO put this in a separate symbol type ?
-  | DATA [Int]
+  = LABEL String
+  | STATIC String [Word8]
   | NOP
   | HALT Value
   | SYCALL Value
@@ -146,6 +146,8 @@ toOpCode ins = case ins of
 
 len :: (Num a) => Instruction -> a
 len ins = case ins of
+  LABEL _ -> 0
+  STATIC _ bytes -> fromIntegral $ length bytes
   NOP -> 3
   HALT v -> 2 + valueLen v
   SYCALL v -> 2 + valueLen v
@@ -191,7 +193,6 @@ len ins = case ins of
   PRINT v -> 2 + valueLen v
   EPRINT v -> 2 + valueLen v
   DUMP -> 3
-  _ -> error "Not opcode"
   where
     valueLen (Reg _) = 1
     valueLen (Cst _) = regLen

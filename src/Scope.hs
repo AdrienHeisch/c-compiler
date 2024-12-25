@@ -1,14 +1,14 @@
 module Scope (Scope (..), Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals, getLocalFuncs, getGlobal, setGlobal) where
 
-import Control.Monad.State.Lazy (State, get, put, modify)
+import Control.Monad.State.Lazy (State, get, modify, put)
 import Data.List (find)
+import Expr (Expr)
 import Identifier (Id (..))
 import Identifier qualified as Id (toStr)
 import Instruction (Instruction, Value (..))
 import Type (Type)
 import Type qualified
 import Utils (modifyFirst)
-import Expr (Expr)
 
 type Var = (Type, Id)
 
@@ -28,7 +28,7 @@ data Context
         lfuncs :: [Instruction],
         lbls :: [String]
       }
-  | Global {gvars :: [(Type, Maybe Expr)]}
+  | Global {gvars :: [(Type, Id, Maybe Expr)]}
   deriving (Show)
 
 getGlobal :: State Scope Context
@@ -102,15 +102,19 @@ getVar = findVar True
 findVar :: Bool -> Id -> State Scope (Maybe (Int, Value, Type))
 findVar doPrev name = go 0
   where
+    Id nameStr = name
+
     go :: Int -> State Scope (Maybe (Int, Value, Type))
     go depth = do
-      Scope _ vars addr _ <- get
+      Scope _ vars addr ctxt <- get
       case go' vars 0 of
-        Just (idx, ty) -> return $ Just (depth, Cst (addr + idx), ty)
+        Just (idx, ty) -> case ctxt of
+          Local {} -> return $ Just (depth, Cst (addr + idx), ty)
+          Global {} -> return $ Just (0, Lbl nameStr, ty)
         Nothing -> do
           mfunc <- Scope.getFunc name
           case mfunc of
-            Just (ty, Id nameStr, _) -> do
+            Just (ty, _, _) -> do
               return $ Just (depth, Lbl nameStr, Type.Pointer ty)
             Nothing | doPrev -> lookInPrev $ go (depth + 1)
             Nothing -> return Nothing

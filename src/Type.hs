@@ -125,15 +125,15 @@ sizeofWithPointer :: Type -> Int
 sizeofWithPointer ty = paddedSizeof ty + if isComplex ty then regLen else 0
 
 mask :: Type -> Int
--- FIXME 64 bit system
+-- FIXME 64 bit system -> replace Int with Word everywhere ?
 mask ty
-  | isComplex ty = 0xFFFFFFFF
+  | isComplex ty = 0x7FFFFFFFFFFFFFFF
   | otherwise = case sizeof ty of
       0 -> 0
       1 -> 0xFF
       2 -> 0xFFFF
       4 -> 0xFFFFFFFF
-      8 -> 0xFFFFFFFF
+      8 -> 0x7FFFFFFFFFFFFFFF
       _ -> error $ "Invalid type size: " ++ show ty
 
 canCast :: Type -> Type -> Bool

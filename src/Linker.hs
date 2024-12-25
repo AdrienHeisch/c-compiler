@@ -2,10 +2,11 @@ module Linker (link) where
 
 import Control.Monad.State.Lazy (State, evalState, get, modify, put)
 import Data.List (find)
+import Data.Word (Word8)
 import Instruction (Instruction (..), Program (..), Register (RR), Value (..))
 import Instruction qualified
 
-type AsmState = State (Int, [(String, Int)])
+type AsmState = State (Int, [(String, Int)], [(String, [Word8])])
 
 startProcedure :: [Instruction]
 startProcedure = [CALL (Lbl "main"), HALT (Reg RR)]
@@ -13,34 +14,58 @@ startProcedure = [CALL (Lbl "main"), HALT (Reg RR)]
 link :: [Program] -> Program
 link programs =
   let ins = startProcedure ++ concatMap (\(Program ins') -> ins') programs
-   in Program $ evalState (firstPass ins >>= secondPass) (0, [])
+   in Program $ evalState (firstPass ins >>= secondPass >>= thirdPass) (0, [], [])
 
-pcAdd :: (Num a) => a -> (a, b) -> (a, b)
-pcAdd n st = let (pc, lbls) = st in (pc + n, lbls)
+pcAdd :: (Num a) => a -> (a, b, c) -> (a, b, c)
+pcAdd n st = let (pc, lbls, d) = st in (pc + n, lbls, d)
 
 firstPass :: [Instruction] -> AsmState [Instruction]
 firstPass ins = case ins of
   [] -> return []
-  (LABEL lbl : rest) -> do
+  LABEL lbl : rest -> do
     newLabel lbl
     firstPass rest
-  (instr : rest) -> do
+  STATIC name bytes : rest -> do
+    addStatic name bytes
+    firstPass rest
+  instr : rest -> do
     modify $ pcAdd $ Instruction.len instr
     rest' <- firstPass rest
     return $ instr : rest'
 
 newLabel :: String -> AsmState ()
 newLabel lbl = do
-  (pc, labels) <- get
+  (pc, labels, d) <- get
   let labels' = labels ++ [(lbl, pc)]
-  put (pc, labels')
+  put (pc, labels', d)
+
+addStatic :: String -> [Word8] -> AsmState ()
+addStatic name bytes = do
+  (p, l, dts) <- get
+  let dts' = dts ++ [(name, bytes)]
+  put (p, l, dts')
 
 secondPass :: [Instruction] -> AsmState [Instruction]
-secondPass ins = case ins of
+secondPass ins = do
+  (_, _, static) <- get
+  static' <- go static
+  return $ ins ++ static'
+  where
+    go :: [(String, [Word8])] -> AsmState [Instruction]
+    go dts = case dts of
+      [] -> return []
+      (name, bytes) : rest -> do
+        newLabel name
+        modify $ pcAdd (length bytes)
+        rest' <- go rest
+        return $ STATIC name bytes : rest'
+
+thirdPass :: [Instruction] -> AsmState [Instruction]
+thirdPass ins = case ins of
   [] -> return []
   (instr : rest) -> do
     instr' <- replaceLabels instr
-    rest' <- secondPass rest
+    rest' <- thirdPass rest
     return $ instr' : rest'
 
 replaceLabels :: Instruction -> AsmState Instruction
@@ -87,7 +112,7 @@ replaceLabels instr = case instr of
 
     replace :: String -> AsmState Value
     replace lbl = do
-      (_, labels) <- get
+      (_, labels, _) <- get
       case find ((lbl ==) . fst) labels of
         Just (_, addr) -> return $ Cst addr
         Nothing -> error $ "Label not found: " ++ show lbl
