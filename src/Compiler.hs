@@ -13,8 +13,8 @@ import Identifier (Id (..))
 import Instruction (Instruction (..), Program (..), Register (..), Value (..), regLen)
 import Op (Op)
 import Op qualified
-import Scope (Scope (Scope), declareFunc, defineFunc, getFunc, getGlobal, newFunction, newScope, setGlobal)
-import Scope qualified (Scope (..), addLabel, addVar, getLocalFuncs, getVar, hasLabel, makeAnonLabel, new)
+import Scope (Scope (Scope))
+import Scope qualified
 import Scope qualified as Context (Context (..))
 import Statement (Statement, StorageClass)
 import Statement qualified
@@ -28,7 +28,7 @@ compile :: [Statement] -> Program
 compile decls =
   let (instructions, globalScope) = runState (statements decls) Scope.new
       globalData = case globalScope of
-        Scope _ _ _ (Context.Global gvars) -> makeData gvars
+        Scope _ _ _ _ (Context.Global gvars) -> makeData gvars
         _ -> unreachable
    in Program (instructions ++ globalData)
 
@@ -54,6 +54,7 @@ statements sts = case sts of
 statement :: Statement -> State Scope [Instruction]
 statement st = case Statement.def st of
   SD.Empty -> return []
+  SD.Struct name fields -> struct name fields
   SD.FuncDec ty name params -> funcDec ty name params
   SD.FuncDef ty name params body -> funcDef ty name params body
   SD.Block sts -> block sts
@@ -77,6 +78,12 @@ statement st = case Statement.def st of
     vars vs = do
       ins <- mapM (\(sc, ty, name, e) -> var sc ty name e) vs
       return . concat $ ins
+
+struct :: Maybe Id -> Maybe [(Type, Id)] -> State Scope [Instruction]
+struct Nothing _ = error "Useless struct declaration" -- TODO move this error to parser ?
+struct (Just name) fields = do
+  !_ <- addType $ Type.Struct (Just name) fields
+  return []
 
 funcDec :: Type -> Id -> [(Type, Maybe Id)] -> State Scope [Instruction]
 funcDec ret name params = do
@@ -106,30 +113,32 @@ loadParams params = case params of
     loadParams rest
 
 var :: StorageClass -> Type -> Id -> Maybe Expr -> State Scope [Instruction]
-var sc' ty name mexpr = checkAssign ty mexpr $ do
-  !_ <- Scope.addVar (ty, name)
-  scope <- get
-  let sc = case (Scope.ctxt scope, sc') of
-        (Context.Local {}, SC.Infer) -> SC.Auto
-        (Context.Global {}, SC.Infer) -> SC.Static
-        _ -> sc'
-  case (Scope.ctxt scope, sc) of
-    (_, SC.Static) -> do
-      ctxt <- Scope.getGlobal
-      case ctxt of
-        Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(ty, name, mexpr)])
-        _ -> unreachable
-      return []
-    (Context.Local {}, SC.Auto) -> case mexpr of
-      Nothing -> return [ADD SP (Cst $ paddedSizeof ty)]
-      Just ex -> case Expr.def ex of
-        ED.Initializer exs -> do
-          ins <- initializer ty exs
-          return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty)]
-        _ -> do
-          ins <- expr ex
-          return $ ins ++ [PUSH (Reg R0)]
-    (ctxt, _) -> error $ "Invalid storage class " ++ show sc ++ " in context " ++ show ctxt
+var sc' ty name mexpr = do
+  ty' <- typeInContext ty
+  checkAssign ty' mexpr $ do
+    !_ <- Scope.addVar (ty', name)
+    scope <- get
+    let sc = case (Scope.ctxt scope, sc') of
+          (Context.Local {}, SC.Infer) -> SC.Auto
+          (Context.Global {}, SC.Infer) -> SC.Static
+          _ -> sc'
+    case (Scope.ctxt scope, sc) of
+      (_, SC.Static) -> do
+        ctxt <- Scope.getGlobal
+        case ctxt of
+          Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(ty', name, mexpr)])
+          _ -> unreachable
+        return []
+      (Context.Local {}, SC.Auto) -> case mexpr of
+        Nothing -> return [ADD SP (Cst $ paddedSizeof ty')]
+        Just ex -> case Expr.def ex of
+          ED.Initializer exs -> do
+            ins <- initializer ty' exs
+            return $ SET R6 (Reg SP) : ins ++ [ADD SP (Cst $ paddedSizeof ty')]
+          _ -> do
+            ins <- expr ex
+            return $ ins ++ [PUSH (Reg R0)]
+      (ctxt, _) -> error $ "Invalid storage class " ++ show sc ++ " in context " ++ show ctxt
 
 initializer :: Type -> [(InitializerKind, Expr)] -> State Scope [Instruction]
 initializer ty = go 0
@@ -390,7 +399,7 @@ getVarAddr name = do
 
 getMember :: Id -> Type -> (Type, Int)
 getMember name ty = case ty of
-  Type.Struct _ initFields -> go 0 initFields
+  Type.Struct _ (Just initFields) -> go 0 initFields
   _ -> error $ "Type has no fields : " ++ show ty
   where
     go :: Int -> [(Type, Id)] -> (Type, Int)
@@ -410,77 +419,83 @@ collectLabels sts = case map Statement.def sts of
   _ : _ -> collectLabels $ tail sts
 
 eval :: Expr -> State Scope (Either Type String)
-eval ex = case Expr.def ex of
-  ED.Id name -> do
-    mty <- Scope.getVar name
-    case mty of
-      Just (_, _, ty) -> return $ Left ty
-      Nothing -> error $ "Undefined identifier : " ++ show name
-  ED.IntLiteral ty _ -> return $ Left ty
-  ED.FltLiteral ty _ -> return $ Left ty
-  ED.StrLiteral str -> return . Left $ Type.Array Type.Char (length str)
-  ED.Initializer _ -> return $ Left Type.Infer {- case exs of -- return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
-                                               [] -> return $ Left Type.Void
-                                               (_, ex') : _ -> do
-                                                 ty <- evalOrThrow ex'
-                                                 return $ Left (Type.Array ty (length exs)) -}
-  ED.UnopPre Op.BitAndOrAddr ex' -> do
-    ev <- eval ex'
-    case ev of
-      Left ty -> return . Left $ Type.Pointer ty
-      ret -> return ret
-  ED.UnopPre Op.MultOrIndir ex' -> do
-    ev <- eval ex'
-    case ev of
-      Left (Type.Pointer ty) -> return $ Left ty
-      Left (Type.Array ty _) -> return $ Left ty
-      Left ty -> return . Right $ "Not a pointer : " ++ show ty
-      ret -> return ret
-  ED.UnopPre _ ex' -> eval ex' -- TODO probably wrong
-  ED.UnopPost _ ex' -> eval ex' -- TODO probably wrong
-  ED.Binop left Op.Member right -> do
-    ev <- eval left
-    case ev of -- TODO probably wrong
-      Left ty -> case Expr.def right of
-        ED.Id field -> do
-          let (ty', _) = getMember field ty
-           in return $ Left ty'
-        _ -> error $ "Invalid member " ++ display right
-      ret -> return ret
-  ED.Binop left Op.MemberPtr right -> do
-    ev <- eval left
-    case ev of
-      Left (Type.Pointer ty) -> case Expr.def right of
-        ED.Id field -> do
-          let (ty', _) = getMember field ty
-           in return $ Left ty'
-        _ -> error $ "Invalid member " ++ display right
-      Left _ -> error "Not a pointer"
-      ret -> return ret
-  ED.Binop left Op.Subscript _ -> do
-    ev <- eval left
-    case ev of -- TODO probably wrong
-      Left (Type.Array ty _) -> return $ Left ty
-      Left (Type.Pointer ty) -> return $ Left ty
-      Left _ -> error $ "Can't perform subscript on " ++ display left
-      ret -> return ret
-  ED.Binop left _ right -> do
-    ev <- eval left
-    case ev of -- TODO probably wrong
-      Left Type.Infer -> eval right
-      ret -> return ret
-  ED.Ternary _ ter_then ter_else -> do
-    ev <- eval ter_then
-    case ev of -- TODO probably wrong
-      Left Type.Infer -> eval ter_else
-      ret -> return ret
-  ED.Call ex' _ -> do
-    ev <- eval ex'
-    return $ evalCall ev
-  ED.Parenthese ex' -> eval ex'
-  ED.SizeofType _ -> return $ Left Type.Int
-  ED.Ambiguous left right -> eval $ solveAmbiguous left right
-  ED.Invalid str -> return $ Right $ "Evaluating invalid expression : " ++ str
+eval ex = do
+  ety <- case Expr.def ex of
+    ED.Id name -> do
+      mty <- Scope.getVar name
+      case mty of
+        Just (_, _, ty) -> return $ Left ty
+        Nothing -> error $ "Undefined identifier : " ++ show name
+    ED.IntLiteral ty _ -> return $ Left ty
+    ED.FltLiteral ty _ -> return $ Left ty
+    ED.StrLiteral str -> return . Left $ Type.Array Type.Char (length str)
+    ED.Initializer _ -> return $ Left Type.Infer {- case exs of -- return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
+                                                 [] -> return $ Left Type.Void
+                                                 (_, ex') : _ -> do
+                                                   ty <- evalOrThrow ex'
+                                                   return $ Left (Type.Array ty (length exs)) -}
+    ED.UnopPre Op.BitAndOrAddr ex' -> do
+      ev <- eval ex'
+      case ev of
+        Left ty -> return . Left $ Type.Pointer ty
+        ret -> return ret
+    ED.UnopPre Op.MultOrIndir ex' -> do
+      ev <- eval ex'
+      case ev of
+        Left (Type.Pointer ty) -> return $ Left ty
+        Left (Type.Array ty _) -> return $ Left ty
+        Left ty -> return . Right $ "Not a pointer : " ++ show ty
+        ret -> return ret
+    ED.UnopPre _ ex' -> eval ex' -- TODO probably wrong
+    ED.UnopPost _ ex' -> eval ex' -- TODO probably wrong
+    ED.Binop left Op.Member right -> do
+      ev <- eval left
+      case ev of -- TODO probably wrong
+        Left ty -> case Expr.def right of
+          ED.Id field -> do
+            let (ty', _) = getMember field ty
+             in return $ Left ty'
+          _ -> error $ "Invalid member " ++ display right
+        ret -> return ret
+    ED.Binop left Op.MemberPtr right -> do
+      ev <- eval left
+      case ev of
+        Left (Type.Pointer ty) -> case Expr.def right of
+          ED.Id field -> do
+            let (ty', _) = getMember field ty
+             in return $ Left ty'
+          _ -> error $ "Invalid member " ++ display right
+        Left _ -> error "Not a pointer"
+        ret -> return ret
+    ED.Binop left Op.Subscript _ -> do
+      ev <- eval left
+      case ev of -- TODO probably wrong
+        Left (Type.Array ty _) -> return $ Left ty
+        Left (Type.Pointer ty) -> return $ Left ty
+        Left _ -> error $ "Can't perform subscript on " ++ display left
+        ret -> return ret
+    ED.Binop left _ right -> do
+      ev <- eval left
+      case ev of -- TODO probably wrong
+        Left Type.Infer -> eval right
+        ret -> return ret
+    ED.Ternary _ ter_then ter_else -> do
+      ev <- eval ter_then
+      case ev of -- TODO probably wrong
+        Left Type.Infer -> eval ter_else
+        ret -> return ret
+    ED.Call ex' _ -> do
+      ev <- eval ex'
+      return $ evalCall ev
+    ED.Parenthese ex' -> eval ex'
+    ED.SizeofType _ -> return $ Left Type.Int
+    ED.Ambiguous left right -> eval $ solveAmbiguous left right
+    ED.Invalid str -> return $ Right $ "Evaluating invalid expression : " ++ str
+  case ety of
+    Right err -> return $ Right err
+    Left ty -> do
+      ty' <- typeInContext ty
+      return $ Left ty'
   where
     evalCall :: Either Type String -> Either Type String
     evalCall mty = case mty of
@@ -493,6 +508,35 @@ evalOrThrow :: Expr -> State Scope Type
 evalOrThrow ex = do
   ev <- eval ex
   return $ case ev of Left ty -> ty; Right err -> error err
+
+typeInContext :: Type -> State Scope Type
+typeInContext ty = case ty of
+  Type.Pointer ty' -> do
+    ty'' <- typeInContext ty'
+    return $ Type.Pointer ty''
+  _ -> do
+    !_ <- addType ty
+    case Type.getName ty of
+      Nothing -> return ty
+      Just name -> do
+        mfty <- Scope.getType name
+        case mfty of
+          Nothing -> error $ "Type not declared: " ++ show ty
+          Just (Nothing, _) -> error $ "Type not defined: " ++ show ty
+          Just (Just fty, _)
+            | conflict ty fty -> error $ "Redefinition of type: " ++ show ty
+            | otherwise -> return fty
+  where
+    conflict lty rty = case (lty, rty) of
+      (Type.Struct _ Nothing, Type.Struct _ (Just _)) -> False
+      (Type.Union _ Nothing, Type.Union _ (Just _)) -> False
+      _ -> lty /= rty
+
+addType :: Type -> State Scope ()
+addType ty' = case ty' of
+  Type.Struct (Just name) Nothing -> Scope.declareType name
+  Type.Struct (Just name) (Just fields) -> Scope.defineType (Type.Struct (Just name) (Just fields), name)
+  _ -> return ()
 
 checkAssign :: Type -> Maybe Expr -> State Scope a -> State Scope a
 checkAssign _ Nothing f = f

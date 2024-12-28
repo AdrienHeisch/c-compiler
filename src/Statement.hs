@@ -22,8 +22,8 @@ data StatementDef
   = Empty
   | FuncDec Type Id [(Type, Maybe Id)]
   | FuncDef Type Id [(Type, Maybe Id)] [Statement] -- TODO use maybe to separate declaration and definition
-  | Struct (Maybe Id) [(Type, Id)] -- TODO use maybe to separate declaration and definition
-  | Union (Maybe Id) [(Type, Id)] -- TODO use maybe to separate declaration and definition
+  | Struct (Maybe Id) (Maybe [(Type, Id)])
+  | Union (Maybe Id) (Maybe [(Type, Id)])
   | Enum (Maybe Id) Type (Maybe [(Id, Maybe Expr)]) -- TODO enforce constants in enum / replace with underlying type at parsing and remove this
   | Typedef Type Id
   | Expr Expr

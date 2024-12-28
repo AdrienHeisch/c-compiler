@@ -1,4 +1,4 @@
-module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask, isComplex, sizeofWithPointer, canCast) where
+module Type (Type (..), signed, unsigned, isInteger, isFloating, sizeof, toStr, paddedSizeof, mask, isComplex, sizeofWithPointer, canCast, getName) where
 
 import Data.List (intercalate)
 import Identifier (Id)
@@ -25,8 +25,8 @@ data Type
   | Pointer Type
   | Array Type Int
   | ArrayNoHint Type
-  | Struct (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
-  | Union (Maybe Id) [(Type, Id)] -- TODO merge with statement constructor ? or external data ?
+  | Struct (Maybe Id) (Maybe [(Type, Id)]) -- TODO merge with statement constructor ? or external data ?
+  | Union (Maybe Id) (Maybe [(Type, Id)]) -- TODO merge with statement constructor ? or external data ?
   | Enum (Maybe Id) Type -- TODO replace with underlying type ?
   | Typedef Id
   | Function Type [Type]
@@ -107,8 +107,10 @@ sizeof ty = case ty of
   LDouble -> 8
   Pointer _ -> regLen
   Array ty' len' -> sizeof ty' * len'
-  Struct _ fields -> sum $ map (sizeof . fst) fields
-  _ -> error $ "Unsized type " ++ show ty
+  Struct _ (Just fields) -> sum $ map (sizeof . fst) fields
+  Union _ (Just fields) -> maximum $ map (sizeof . fst) fields
+  Enum _ ty' -> sizeof ty'
+  _ -> error $ "Not a concrete type: " ++ show ty
 
 paddedSizeof :: Type -> Int
 paddedSizeof ty = (((sizeof ty - 1) `div` regLen) + 1) * regLen
@@ -120,6 +122,13 @@ isComplex ty = case ty of
   Type.Struct _ _ -> True
   Type.Union _ _ -> True
   _ -> False
+
+getName :: Type -> Maybe Id
+getName ty = case ty of
+  Type.Struct name _ -> name
+  Type.Union name _ -> name
+  Type.Enum name _ -> name
+  _ -> Nothing
 
 sizeofWithPointer :: Type -> Int
 sizeofWithPointer ty = paddedSizeof ty + if isComplex ty then regLen else 0

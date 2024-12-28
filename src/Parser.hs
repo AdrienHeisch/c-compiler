@@ -619,7 +619,7 @@ structType = structOrUnionType Ty.Struct
 unionType :: State [Token] (Either Type String, [Token])
 unionType = structOrUnionType Ty.Union
 
-structOrUnionType :: (Maybe Id -> [(Type, Id)] -> Type) -> State [Token] (Either Type String, [Token])
+structOrUnionType :: (Maybe Id -> Maybe [(Type, Id)] -> Type) -> State [Token] (Either Type String, [Token])
 structOrUnionType parser = do
   tokens <- get
   name <- case Token.def $ head tokens of
@@ -633,9 +633,9 @@ structOrUnionType parser = do
       modify $ drop 1
       structTks <- collectStructFields
       case structOrUnionFields structTks of
-        Left fields -> return (Left (parser name fields), [head tokens, head tokens'] ++ structTks)
+        Left fields -> return (Left (parser name (Just fields)), [head tokens, head tokens'] ++ structTks)
         Right err -> return (Right err, structTks)
-    _ -> return (Left (parser name []), take 1 tokens)
+    _ -> return (Left (parser name Nothing), take 1 tokens)
 
 structOrUnionFields :: [Token] -> Either [(Type, Id)] String
 structOrUnionFields tokens = validate $ evalState statementList $ Token.filterNL tokens
@@ -651,8 +651,8 @@ structOrUnionFields tokens = validate $ evalState statementList $ Token.filterNL
         Right err -> Right err
 
     makeField (SD.Var (var :| vars)) = Left $ map varToField (var : vars)
-    makeField (SD.Struct Nothing fields) = Left fields
-    makeField (SD.Union Nothing fields) = Left fields -- FIXME inner unions
+    makeField (SD.Struct Nothing (Just fields)) = Left fields
+    makeField (SD.Union Nothing (Just fields)) = Left fields -- FIXME inner unions
     makeField st = Right $ "Invalid field : " ++ show st
 
     varToField (_, ty, name, _) = (ty, name)
