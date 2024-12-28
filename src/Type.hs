@@ -128,6 +128,7 @@ getName ty = case ty of
   Type.Struct name _ -> name
   Type.Union name _ -> name
   Type.Enum name _ -> name
+  Type.Typedef name -> Just name
   _ -> Nothing
 
 sizeofWithPointer :: Type -> Int

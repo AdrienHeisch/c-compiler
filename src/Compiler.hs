@@ -23,6 +23,7 @@ import Statement qualified as SD (StatementDef (..))
 import Type (Type, paddedSizeof, sizeof)
 import Type qualified
 import Utils (Display (display), intoBytes, maybeListToList, unreachable)
+import Debug.Trace (trace)
 
 compile :: [Statement] -> Program
 compile decls =
@@ -55,6 +56,7 @@ statement :: Statement -> State Scope [Instruction]
 statement st = case Statement.def st of
   SD.Empty -> return []
   SD.Struct name fields -> struct name fields
+  SD.Typedef ty name -> typedef ty name
   SD.FuncDec ty name params -> funcDec ty name params
   SD.FuncDef ty name params body -> funcDef ty name params body
   SD.Block sts -> block sts
@@ -83,6 +85,11 @@ struct :: Maybe Id -> Maybe [(Type, Id)] -> State Scope [Instruction]
 struct Nothing _ = error "Useless struct declaration" -- TODO move this error to parser ?
 struct (Just name) fields = do
   !_ <- addType $ Type.Struct (Just name) fields
+  return []
+
+typedef :: Type -> Id -> State Scope [Instruction]
+typedef ty name = do
+  Scope.defineType (ty, name)
   return []
 
 funcDec :: Type -> Id -> [(Type, Maybe Id)] -> State Scope [Instruction]
@@ -516,7 +523,7 @@ typeInContext ty = case ty of
     return $ Type.Pointer ty''
   _ -> do
     !_ <- addType ty
-    case Type.getName ty of
+    case trace (show ty) Type.getName ty of
       Nothing -> return ty
       Just name -> do
         mfty <- Scope.getType name
@@ -524,6 +531,7 @@ typeInContext ty = case ty of
           Nothing -> error $ "Type not declared: " ++ show ty
           Just (Nothing, _) -> error $ "Type not defined: " ++ show ty
           Just (Just fty, _)
+            | case ty of Type.Typedef _ -> True; _ -> False -> return fty 
             | conflict ty fty -> error $ "Redefinition of type: " ++ show ty
             | otherwise -> return fty
   where
