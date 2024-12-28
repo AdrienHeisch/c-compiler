@@ -143,9 +143,7 @@ rightAssociative :: [Op]
 rightAssociative =
   binaryAssign
     ++ ternary
-    ++ [ Assign,
-         Member,
-         MemberPtr
+    ++ [ Assign
        ]
 
 isRightAssociative :: Op -> Bool
