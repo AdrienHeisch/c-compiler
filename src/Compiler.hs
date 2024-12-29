@@ -308,6 +308,9 @@ binop left op right = do
         Op.MultOrIndir -> [MUL R0 (Reg R4)]
         Op.Div -> [DIV R0 (Reg R4)]
         Op.Mod -> [MOD R0 (Reg R4)]
+        Op.BitAndOrAddr -> [AND R0 (Reg R4)]
+        Op.BitOr -> [OR R0 (Reg R4)]
+        Op.BitXor -> [XOR R0 (Reg R4)]
         Op.Assign -> [storeTy leftTy R5 (Reg R0)]
         Op.Subscript -> case leftTy of
           Type.Array ty' _ -> [MUL R4 (Cst $ sizeof ty'), ADD R4 (Reg R0), LOAD R0 (Reg R4)]
