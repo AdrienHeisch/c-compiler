@@ -22,8 +22,8 @@ import Statement qualified as SC (StorageClass (..))
 import Statement qualified as SD (StatementDef (..))
 import Type (Type, paddedSizeof, sizeof)
 import Type qualified
-import Utils (Display (display), intoBytes, maybeListToList, unreachable)
-import Debug.Trace (trace)
+import Utils (Display (display), intoByte, intoBytes, maybeListToList, unreachable)
+import Data.Char (ord)
 
 compile :: [Statement] -> Program
 compile decls =
@@ -41,6 +41,7 @@ makeData gvars = case gvars of
           Nothing -> [0]
           Just ex -> case Expr.def ex of
             ED.IntLiteral _ int -> intoBytes (Type.paddedSizeof ty) int
+            ED.StrLiteral str -> map (intoByte . ord) str
             _ -> error $ "Not a constant value: " ++ display ex
      in STATIC name value : makeData rest
 
@@ -99,7 +100,6 @@ funcDec ret name params = do
 
 funcDef :: Type -> Id -> [(Type, Maybe Id)] -> [Statement] -> State Scope [Instruction]
 funcDef ret name params body = do
-  scope <- get
   Scope.newFunction
   Scope.declareFunc (Type.Function ret (map fst params), name)
   collectLabels body
@@ -107,7 +107,7 @@ funcDef ret name params body = do
   loadParams namedParams
   ins <- statements body
   insLocals <- Scope.getLocalFuncs
-  put scope
+  Scope.pop
   let Id nameStr = name
   insFunc <- Scope.defineFunc (Type.Function ret (map fst params), name) (LABEL nameStr : ins)
   return $ insFunc ++ insLocals
@@ -255,7 +255,12 @@ expr e = do
     ED.IntLiteral _ int -> do
       return [SET R0 (Cst int)]
     -- ED.FltLiteral flt -> []
-    -- ED.StrLiteral str -> []
+    ED.StrLiteral _ -> do
+      ctxt <- Scope.getGlobal
+      case ctxt of
+        Context.Global gvars -> Scope.setGlobal $ Context.Global (gvars ++ [(Type.Pointer Type.Char, Id "str", Just e)]) --FIXME name
+        _ -> unreachable
+      return [SET R0 (Lbl "str")]
     ED.Initializer _ -> error $ "Can't evaluate initializer : " ++ display e
     ED.UnopPre op ex -> unop op ex
     -- ED.UnopPost op ex -> []
@@ -435,12 +440,12 @@ eval ex = do
         Nothing -> error $ "Undefined identifier : " ++ show name
     ED.IntLiteral ty _ -> return $ Left ty
     ED.FltLiteral ty _ -> return $ Left ty
-    ED.StrLiteral str -> return . Left $ Type.Array Type.Char (length str)
-    ED.Initializer _ -> return $ Left Type.Infer {- case exs of -- return $ Right "Can't evaluate initializer" -- Type.Struct Nothing (map (second eval) exs) -- FIXME eval whole array
-                                                 [] -> return $ Left Type.Void
-                                                 (_, ex') : _ -> do
-                                                   ty <- evalOrThrow ex'
-                                                   return $ Left (Type.Array ty (length exs)) -}
+    ED.StrLiteral _ -> return . Left $ Type.Pointer Type.Char
+    ED.Initializer exs -> case exs of {- case exs of -- return $ Right "Can't evaluate initializer" -} -- Type.Struct Nothing (map (second eval) exs)
+      [] -> return $ Left Type.Infer
+      (_, ex') : _ -> do
+        ty <- evalOrThrow ex' -- FIXME eval whole array
+        return $ Left (Type.Array ty (length exs))
     ED.UnopPre Op.BitAndOrAddr ex' -> do
       ev <- eval ex'
       case ev of
@@ -523,7 +528,7 @@ typeInContext ty = case ty of
     return $ Type.Pointer ty''
   _ -> do
     !_ <- addType ty
-    case trace (show ty) Type.getName ty of
+    case Type.getName ty of
       Nothing -> return ty
       Just name -> do
         mfty <- Scope.getType name

@@ -1,4 +1,4 @@
-module Scope (Scope (..), Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals, getLocalFuncs, getGlobal, setGlobal, declareType, defineType, getType) where
+module Scope (Scope (..), Context (..), new, newFunction, newScope, addVar, addVars, getVar, addLabel, hasLabel, makeAnonLabel, defineFunc, declareFunc, getFunc, getLocals, getLocalFuncs, getGlobal, setGlobal, declareType, defineType, getType, pop) where
 
 import Control.Monad.State.Lazy (State, get, modify, put)
 import Data.List (find)
@@ -79,6 +79,13 @@ newScope = do
   case scope of
     Scope _ vars _ _ (Local {lbls = lbls}) -> put $ Scope [] [] [] (length vars) (Local scope [] lbls)
     Scope _ _ _ _ (Global _) -> error "Tried to create scope in global context"
+
+pop :: State Scope ()
+pop = do
+  Scope {ctxt} <- get
+  case ctxt of
+    Local {prev} -> put prev
+    Global {} -> error "Can't pop global context"
 
 addVars :: [(Type, Id)] -> State Scope ()
 addVars vars = case vars of
