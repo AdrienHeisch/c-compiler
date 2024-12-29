@@ -84,8 +84,11 @@ statement st = case Statement.def st of
 
 struct :: Maybe Id -> Maybe [(Type, Id)] -> State Scope [Instruction]
 struct Nothing _ = error "Useless struct declaration" -- TODO move this error to parser ?
+struct (Just name) Nothing = do
+  !_ <- Scope.declareType name
+  return []
 struct (Just name) fields = do
-  !_ <- addType $ Type.Struct (Just name) fields
+  !_ <- defineType $ Type.Struct (Just name) fields
   return []
 
 typedef :: Type -> Id -> State Scope [Instruction]
@@ -530,27 +533,26 @@ typeInContext ty = case ty of
     ty'' <- typeInContext ty'
     return $ Type.Pointer ty''
   _ -> do
-    !_ <- addType ty
+    !_ <- defineType ty
     case Type.getName ty of
       Nothing -> return ty
       Just name -> do
         mfty <- Scope.getType name
         case mfty of
-          Nothing -> error $ "Type not declared: " ++ show ty
-          Just (Nothing, _) -> error $ "Type not defined: " ++ show ty
+          Nothing -> error $ "Type not declared: " ++ show name
+          Just (Nothing, _) -> error $ "Type not defined: " ++ show name
           Just (Just fty, _)
-            | case ty of Type.Typedef _ -> True; _ -> False -> return fty 
-            | conflict ty fty -> error $ "Redefinition of type: " ++ show ty
+            | conflict ty fty -> error $ "Redefinition of type: " ++ show ty ++ " as " ++ show fty
             | otherwise -> return fty
   where
     conflict lty rty = case (lty, rty) of
+      (Type.Typedef _, _) -> False
       (Type.Struct _ Nothing, Type.Struct _ (Just _)) -> False
       (Type.Union _ Nothing, Type.Union _ (Just _)) -> False
       _ -> lty /= rty
 
-addType :: Type -> State Scope ()
-addType ty' = case ty' of
-  Type.Struct (Just name) Nothing -> Scope.declareType name
+defineType :: Type -> State Scope ()
+defineType ty' = case ty' of
   Type.Struct (Just name) (Just fields) -> Scope.defineType (Type.Struct (Just name) (Just fields), name)
   _ -> return ()
 
