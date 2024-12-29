@@ -38,7 +38,7 @@ makeData gvars = case gvars of
   [] -> []
   (ty, Id name, mexpr) : rest ->
     let value = case mexpr of
-          Nothing -> [0]
+          Nothing -> take (Type.paddedSizeof ty) [0..]
           Just ex -> case Expr.def ex of
             ED.IntLiteral _ int -> intoBytes (Type.paddedSizeof ty) int
             ED.StrLiteral str -> map (intoByte . ord) str
